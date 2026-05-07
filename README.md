@@ -92,6 +92,10 @@ gh variable set APP_NAME          --repo <owner>/<repo> --body "widget-detector"
 gh variable list                  --repo <owner>/<repo>
 ```
 
+Once set, the **Variables** tab on *Settings → Secrets and variables → Actions* should look like this:
+
+![Repo variables in GitHub UI](docs/images/github-variables.png)
+
 ## Setup: GitHub secrets
 
 The two automation workflows need credentials. Set them once on your fork:
@@ -112,6 +116,10 @@ gh secret set EI_API_KEY          --repo <owner>/<repo>   # paste EI key when pr
 gh secret set FOUNDRIES_API_TOKEN --repo <owner>/<repo>   # paste Foundries token
 gh secret list                    --repo <owner>/<repo>   # verify both are present
 ```
+
+Once set, the **Secrets** tab on *Settings → Secrets and variables → Actions* should look like this (values are write-only and never shown in the UI):
+
+![Repo secrets in GitHub UI](docs/images/github-secrets.png)
 
 These secrets are encrypted and only exposed to workflow runs at execution time. Rotate them in Edge Impulse / Foundries first, then re-run `gh secret set` to update GitHub.
 
