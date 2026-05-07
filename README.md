@@ -20,16 +20,21 @@ flowchart TB
     end
 
     Factory["Foundries factory<br/><i>vars.FOUNDRIES_FACTORY</i><br/>container-main CI builds arm64 OTA target"]
-    UnoQ["Arduino UNO Q<br/>pulls + runs &lt;APP_NAME&gt;<br/><code>edge-impulse-linux-runner</code> on /dev/video0 → :4912"]
+
+    subgraph Device["Arduino UNO Q"]
+        direction TB
+        Runner["<code>edge-impulse-linux-runner</code><br/>main object-detection model<br/>on /dev/video0 → :4912"]
+        Watcher["<b>anomaly-watcher.py</b><br/>visual-anomaly .eim<br/>fires capture-and-upload.sh<br/>when score ≥ THRESHOLD"]
+    end
 
     EI -- "sample counts<br/>(EI_API_KEY)" --> WF1
     WF1 -- "retrain + build<br/>(EI_API_KEY)" --> EI
     WF2 -- "FOUNDRIES_API_TOKEN" --> Factory
-    Factory -- "aktualizr-lite poll" --> UnoQ
-    UnoQ -- "capture-and-upload.sh<br/>(EI_API_KEY)" --> EI
+    Factory -- "aktualizr-lite poll" --> Runner
+    Watcher -- "anomaly-triggered upload<br/>(EI_API_KEY)" --> EI
 
     classDef secret stroke-dasharray: 4 3;
-    class EI,Factory,UnoQ secret;
+    class EI,Factory,Device secret;
 ```
 
 Two GitHub Actions workflows form the closed loop. ① watches EI for new data and produces a tagged release; ② reacts to that tag and pushes to the factory. From there Foundries' own CI takes over and the device polls for the new target.
@@ -67,7 +72,8 @@ The `app/app.yaml` shipped here wires this example into the App Lab `arduino:vid
 ├── scripts/
 │   ├── refresh-model.sh                  # local equivalent of workflow ① build steps
 │   ├── register-device.sh                # non-interactive `fioup register --api-token` wrapper
-│   └── capture-and-upload.sh             # grab frames on the UNO Q & POST to EI ingestion API
+│   ├── capture-and-upload.sh             # grab frames on the UNO Q & POST to EI ingestion API
+│   └── anomaly-watcher.py                # run a visual-anomaly .eim live; on anomaly, trigger capture
 ├── docs/images/                          # README screenshots
 ├── .dataset-state.json                   # mutable state (sample count, deployment version)
 ├── .github/workflows/
@@ -298,6 +304,80 @@ Recognized env: `LABEL`, `CATEGORY` (`training`/`testing`), `COUNT`, `INTERVAL`,
 - If the inference container already holds `/dev/video0`, ffmpeg will fail or grab a black frame. Stop the container first (`sudo systemctl stop fioup`) or attach a second UVC camera and pass `DEVICE=/dev/video1`.
 - For object-detection projects, samples uploaded with a generic label go into the EI Studio **Labeling queue** for bounding-box annotation. Workflow ① only retrains on what's labeled, so unlabeled queue items don't trigger immediate rebuilds.
 - To skip the wait for the hourly cron after uploading, kick the workflow manually: `gh workflow run ei-data-watch-and-retrain.yml -F force=true`.
+
+## Auto-capture on anomaly
+
+[`scripts/anomaly-watcher.py`](scripts/anomaly-watcher.py) turns the device into an active-learning data collector. It runs a **second** Edge Impulse model — a visual-anomaly detector that you train in a separate EI project — against the live camera feed. Whenever the anomaly score crosses a threshold, it hands the frame to `capture-and-upload.sh`, which uploads it to your **main** project's training (or testing) dataset. The next watcher-workflow tick retrains the object detector on those new "interesting" samples.
+
+```
+/dev/video0 → anomaly .eim (visual_anomaly_max ≥ THRESHOLD)
+                                  │
+                                  ▼
+                       capture-and-upload.sh
+                                  │
+                                  ▼
+                         Edge Impulse ingestion
+                                  │
+                                  ▼
+                  ei-data-watch-and-retrain.yml
+                  retrains object detection model
+```
+
+**One-time setup on the UNO Q:**
+
+```bash
+sudo apt install -y python3-pip python3-opencv ffmpeg
+pip3 install --user edge_impulse_linux
+```
+
+**Provide the anomaly model.** Build the `.eim` from your visual-anomaly EI project — same flow as workflow ①, just run [`scripts/refresh-model.sh`](scripts/refresh-model.sh) locally with `EI_PROJECT_ID=<anomaly project id>` and copy `app/model/<file>.eim` to the UNO Q. Drop it next to the script:
+
+```bash
+scp app/model/<file>.eim uno-q:~/scripts/anomaly.eim
+```
+
+**Run the watcher** (the `EI_API_KEY` here is for the *target* project that should receive new samples — usually your object-detection project, not the anomaly project):
+
+```bash
+sudo systemctl stop fioup       # release /dev/video0 from the inference container
+EI_API_KEY=ei_xxx \
+  ANOMALY_MODEL=~/scripts/anomaly.eim \
+  THRESHOLD=5.0 COOLDOWN=10 \
+  CATEGORY=training LABEL=anomaly \
+  ./scripts/anomaly-watcher.py
+```
+
+Recognized env: `EI_API_KEY` (required), `ANOMALY_MODEL`, `THRESHOLD`, `COOLDOWN` (s between captures), `CATEGORY` (`training`/`testing`), `LABEL`, `DEVICE` (default `/dev/video0`), `MAX_UPLOADS` (cap per session, `0` = unlimited), `DEVICE_NAME`, `UPLOAD_SCRIPT`.
+
+**Run it as a service** (optional). Drop a unit at `/etc/systemd/system/anomaly-watcher.service`:
+
+```ini
+[Unit]
+Description=EI anomaly-driven data capture
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=EI_API_KEY=ei_xxx
+Environment=ANOMALY_MODEL=/home/arduino/scripts/anomaly.eim
+Environment=THRESHOLD=5.0
+ExecStart=/home/arduino/scripts/anomaly-watcher.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable --now anomaly-watcher
+```
+
+**Camera conflict:** the inference container and the watcher both want `/dev/video0`. Pick one of:
+
+- Stop the inference app while collecting data: `sudo systemctl stop fioup`.
+- Attach a second UVC camera and run the watcher with `DEVICE=/dev/video1`.
+- Cap collection sessions with `MAX_UPLOADS=N` so the watcher exits after N captures.
 
 ## App Lab alternative
 

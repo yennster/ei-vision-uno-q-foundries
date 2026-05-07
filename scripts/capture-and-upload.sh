@@ -21,6 +21,10 @@
 #   WIDTH x HEIGHT     capture resolution                     (default: 640x480)
 #   DEVICE_NAME        prefix on filenames (the device's name in EI)
 #                                                             (default: $(hostname))
+#   IMAGE_FILE         If set, skip camera capture and upload this file
+#                      directly. Used by anomaly-watcher.py to forward a
+#                      frame it already grabbed. COUNT/INTERVAL/DEVICE
+#                      are ignored when this is set.
 #
 # Usage:
 #   sudo apt install -y ffmpeg                # one-time
@@ -62,17 +66,44 @@ case "$CATEGORY" in
   *) echo "CATEGORY must be 'training' or 'testing'" >&2; exit 1 ;;
 esac
 
+INGEST="https://ingestion.edgeimpulse.com/api/${CATEGORY}/data"
+
+upload_file() {
+  local f=$1 fname=$2
+  curl -fsS -X POST "$INGEST" \
+    -H "x-api-key: ${EI_API_KEY}" \
+    -H "x-label: ${LABEL}" \
+    -H "x-file-name: ${fname}" \
+    -H "Content-Type: image/jpeg" \
+    --data-binary "@${f}" \
+    -o /dev/null
+}
+
+# Mode 1: pre-captured single frame (used by anomaly-watcher.py).
+if [ -n "${IMAGE_FILE:-}" ]; then
+  if [ ! -f "$IMAGE_FILE" ]; then
+    echo "IMAGE_FILE not found: $IMAGE_FILE" >&2; exit 1
+  fi
+  ts=$(date +%Y%m%d-%H%M%S-%N)
+  fname="${LABEL}.${DEVICE_NAME}.${ts}.jpg"
+  size=$(stat -c%s "$IMAGE_FILE" 2>/dev/null || stat -f%z "$IMAGE_FILE")
+  if upload_file "$IMAGE_FILE" "$fname"; then
+    echo "[upload] $fname (${size}B) → ${CATEGORY} (label=${LABEL})"
+    exit 0
+  else
+    echo "[upload] failed for $IMAGE_FILE" >&2; exit 1
+  fi
+fi
+
+# Mode 2: capture COUNT frames from the camera and upload each.
 if ! command -v ffmpeg >/dev/null 2>&1; then
   echo "ffmpeg required: sudo apt install -y ffmpeg" >&2
   exit 1
 fi
-
 if [ ! -e "$DEVICE" ]; then
   echo "$DEVICE does not exist. Plug in a UVC camera or override DEVICE." >&2
   exit 1
 fi
-
-INGEST="https://ingestion.edgeimpulse.com/api/${CATEGORY}/data"
 
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
@@ -97,13 +128,7 @@ for i in $(seq 1 "$COUNT"); do
     continue
   fi
 
-  if curl -fsS -X POST "$INGEST" \
-      -H "x-api-key: ${EI_API_KEY}" \
-      -H "x-label: ${LABEL}" \
-      -H "x-file-name: ${fname}" \
-      -H "Content-Type: image/jpeg" \
-      --data-binary "@${out}" \
-      -o /dev/null; then
+  if upload_file "$out" "$fname"; then
     echo "  [$i/$COUNT] uploaded $fname (${size}B)"
     ok=$((ok + 1))
   else
