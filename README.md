@@ -89,7 +89,12 @@ These secrets are encrypted and only exposed to workflow runs at execution time.
 
 Before any OTA target can land on the device, the UNO Q has to enroll itself with the factory using **fioup** (Foundries' container-only OTA client). Once registered, the device polls for new targets and runs whatever the factory has built — including `ei-vision`. Reference: <https://docs.foundries.io/96/getting-started/fioup-registration/index.html>.
 
-Run these on the **UNO Q itself** (over SSH or a serial console; the UNO Q runs Debian on aarch64):
+Run these on the **UNO Q itself** — the board runs Debian on aarch64. Two ways to get a shell:
+
+- **SSH (recommended for headless use):** [docs.arduino.cc/tutorials/uno-q/ssh](https://docs.arduino.cc/tutorials/uno-q/ssh/) walks through enabling sshd, default credentials, and finding the device's IP. For Wi-Fi setup and remote-access basics see [docs.arduino.cc/tutorials/uno-q/remote-access](https://docs.arduino.cc/tutorials/uno-q/remote-access/).
+- **Serial console over USB-C:** the Linux-side single-board computer exposes a console — see [docs.arduino.cc/tutorials/uno-q/single-board-computer](https://docs.arduino.cc/tutorials/uno-q/single-board-computer/) and the [Debian guide](https://docs.arduino.cc/tutorials/uno-q/debian-guide/) for the OS layout. The general overview is the [UNO Q user manual](https://docs.arduino.cc/tutorials/uno-q/user-manual/).
+
+Once you're in:
 
 **1. Install fioup from the official apt repo**
 
