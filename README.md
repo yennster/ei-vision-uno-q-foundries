@@ -229,6 +229,24 @@ git push  # triggers container-main CI build → OTA target
 
 Any UNO Q registered to the factory (with the `main` tag, by default) pulls the new arm64 image and starts the Compose service on its next aktualizr-lite poll. Inference is exposed on `:4912`.
 
+## Refresh the model locally
+
+If you'd rather not wait for the hourly workflow (or want to dry-run before tagging), [`scripts/refresh-model.sh`](scripts/refresh-model.sh) does the same EI build+download flow on your laptop. It honors the same env-vars as the workflow:
+
+```bash
+EI_API_KEY=ei_xxx EI_PROJECT_ID=12345 ./scripts/refresh-model.sh
+
+# also retrain first:
+EI_API_KEY=ei_xxx EI_PROJECT_ID=12345 RETRAIN=yes ./scripts/refresh-model.sh
+
+# override defaults:
+EI_API_KEY=ei_xxx EI_PROJECT_ID=12345 \
+  EI_MODEL_TYPE=int8 APP_NAME=widget-detector \
+  ./scripts/refresh-model.sh
+```
+
+The script writes `app/model/${EI_MODEL_FILENAME}` and `containers/${APP_NAME}/model.eim` and updates `.dataset-state.json`. Commit + tag a new `vX.Y.Z` to fire the deploy workflow.
+
 ## Container behavior
 
 The container runs Edge Impulse's official Linux runner against the bundled `.eim`:
