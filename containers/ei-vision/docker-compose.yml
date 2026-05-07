@@ -1,0 +1,13 @@
+version: '3.2'
+
+services:
+  ei-vision:
+    image: hub.foundries.io/jenny/ei-vision:latest
+    restart: always
+    ports:
+      - "4912:4912"
+    devices:
+      - "/dev/video0:/dev/video0"
+    group_add:
+      - video
+    privileged: false

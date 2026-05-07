@@ -1,0 +1,9 @@
+name: EI Vision
+description: "Coffee & lamp object detection on Arduino UNO Q (Edge Impulse FOMO, 320x320 RGB)"
+ports: []
+bricks:
+  - arduino:video_object_detection:
+      variables:
+        EI_OBJ_DETECTION_MODEL: /home/arduino/.arduino-bricks/ei-models/object-detection.eim
+  - arduino:web_ui: {}
+icon: 🤖
