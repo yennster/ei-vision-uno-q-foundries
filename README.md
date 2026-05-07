@@ -64,7 +64,8 @@ The `app/app.yaml` shipped here wires this example into the App Lab `arduino:vid
 │       ├── model.eim                     # generic name the Dockerfile expects
 │       └── README.md
 ├── scripts/
-│   └── refresh-model.sh                  # local equivalent of workflow ① build steps
+│   ├── refresh-model.sh                  # local equivalent of workflow ① build steps
+│   └── register-device.sh                # non-interactive `fioup register --api-token` wrapper
 ├── docs/images/                          # README screenshots
 ├── .dataset-state.json                   # mutable state (sample count, deployment version)
 ├── .github/workflows/
@@ -162,13 +163,28 @@ sudo apt install -y docker.io docker-compose-v2
 
 **2. Register the device against your factory**
 
+*Interactive (default — browser device flow):*
+
 ```bash
 sudo fioup register --factory <FOUNDRIES_FACTORY> --name <DEVICE_NAME>
 ```
 
 `fioup` prints a one-time URL and user code. Open it in your browser and authorize the device (link expires in 15 minutes). When it returns `Device is now registered.`, registration is complete and the mTLS material is stored under `/var/sota/`.
 
-**3. Verify connectivity**
+*Non-interactive (API token — useful for fleet provisioning or headless boards without a paired workstation):*
+
+[`scripts/register-device.sh`](scripts/register-device.sh) wraps fioup's hidden `--api-token` flag, registers the device, runs `fioup check`, and enables the systemd service. Copy the script to the device and run:
+
+```bash
+sudo FOUNDRIES_API_TOKEN=$(cat ~/.fio-token) \
+     FOUNDRIES_FACTORY=<FOUNDRIES_FACTORY> \
+     DEVICE_NAME=<DEVICE_NAME> \
+     ./scripts/register-device.sh
+```
+
+The token must have the `devices:create` scope for the target factory. Generate a scoped one at https://app.foundries.io/settings/tokens/ — don't reuse the broad token used for `containers.git` pushes. Rotate it after provisioning if the device won't need it again.
+
+**3. Verify connectivity** (skip if you used the script — it does this for you)
 
 ```bash
 sudo fioup check
@@ -176,7 +192,7 @@ sudo fioup check
 
 The device should now appear at `https://app.foundries.io/factories/<FOUNDRIES_FACTORY>/devices/`.
 
-**4. Enable the update service** so the device polls for and applies new targets automatically:
+**4. Enable the update service** so the device polls for and applies new targets automatically (also done by the script):
 
 ```bash
 sudo systemctl enable --now fioup
