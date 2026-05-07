@@ -22,7 +22,7 @@
 #   DEVICE_NAME        prefix on filenames (the device's name in EI)
 #                                                             (default: $(hostname))
 #   IMAGE_FILE         If set, skip camera capture and upload this file
-#                      directly. Used by anomaly-watcher.py to forward a
+#                      directly. Used by motion-watcher.py to forward a
 #                      frame it already grabbed. COUNT/INTERVAL/DEVICE
 #                      are ignored when this is set.
 #
@@ -79,7 +79,7 @@ upload_file() {
     -o /dev/null
 }
 
-# Mode 1: pre-captured single frame (used by anomaly-watcher.py).
+# Mode 1: pre-captured single frame (used by motion-watcher.py).
 if [ -n "${IMAGE_FILE:-}" ]; then
   if [ ! -f "$IMAGE_FILE" ]; then
     echo "IMAGE_FILE not found: $IMAGE_FILE" >&2; exit 1

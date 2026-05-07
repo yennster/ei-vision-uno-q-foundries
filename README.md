@@ -10,37 +10,31 @@ This repo ships a working coffee/lamp object detector as the bundled example —
 
 ```mermaid
 flowchart TB
-    EI["Edge Impulse — main<br/><i>vars.EI_PROJECT_ID</i><br/>(object detection)"]
-    EIA["Edge Impulse — anomaly<br/><i>vars.EI_ANOMALY_PROJECT_ID</i><br/>(visual anomaly, optional)"]
+    EI["Edge Impulse project<br/><i>vars.EI_PROJECT_ID</i>"]
 
     subgraph GH["GitHub repo &lt;owner&gt;/&lt;repo&gt;"]
         direction TB
-        WF1["<b>① ei-data-watch-and-retrain.yml</b> (hourly)<br/>main project: retrain → build → tag"]
-        WF1A["<b>①′ ei-anomaly-watch-and-retrain.yml</b> (hourly +30m)<br/>anomaly project: retrain → build → tag"]
-        WF2["<b>② foundries-deploy.yml</b> (on <code>v*</code> tag)<br/>• clone factory <code>containers.git</code><br/>• sync <code>ei-vision/</code> + (optional) <code>anomaly-watcher/</code><br/>• template compose, git push"]
-        WF1  -- "tag push" --> WF2
-        WF1A -- "tag push" --> WF2
+        WF1["<b>① ei-data-watch-and-retrain.yml</b> (hourly)<br/>• compare EI sample count vs <code>.dataset-state.json</code><br/>• POST /jobs/retrain → poll<br/>• POST /jobs/build-ondevice-model<br/>• download .eim → commit → push <code>vX.Y.Z</code> tag"]
+        WF2["<b>② foundries-deploy.yml</b> (on <code>v*</code> tag)<br/>• clone factory <code>containers.git</code><br/>• template compose with <code>__FACTORY__</code> / <code>__APP_NAME__</code><br/>• git push"]
+        WF1 -- "tag push" --> WF2
     end
 
     Factory["Foundries factory<br/><i>vars.FOUNDRIES_FACTORY</i><br/>container-main CI builds arm64 OTA target"]
 
     subgraph Device["Arduino UNO Q"]
         direction TB
-        Runner["<b>ei-vision</b> container<br/><code>edge-impulse-linux-runner</code><br/>main model on /dev/video0 → :4912"]
-        Watcher["<b>anomaly-watcher</b> container<br/><code>anomaly-watcher.py</code> on the anomaly .eim<br/>fires <code>capture-and-upload.sh</code><br/>when score ≥ THRESHOLD"]
+        Runner["<code>edge-impulse-linux-runner</code><br/>main model on /dev/video0 → :4912"]
+        Watcher["<b>motion-watcher.py</b><br/>OpenCV background subtraction;<br/>fires <code>capture-and-upload.sh</code><br/>when motion ≥ THRESHOLD"]
     end
 
-    EI  -- "sample counts<br/>(EI_API_KEY)" --> WF1
-    EIA -- "sample counts<br/>(EI_API_KEY)" --> WF1A
-    WF1  -- "retrain + build<br/>(EI_API_KEY)" --> EI
-    WF1A -- "retrain + build<br/>(EI_API_KEY)" --> EIA
+    EI -- "sample counts<br/>(EI_API_KEY)" --> WF1
+    WF1 -- "retrain + build<br/>(EI_API_KEY)" --> EI
     WF2 -- "FOUNDRIES_API_TOKEN" --> Factory
     Factory -- "aktualizr-lite poll" --> Runner
-    Factory -- "aktualizr-lite poll" --> Watcher
-    Watcher -- "anomaly-triggered upload<br/>(EI_API_KEY)" --> EI
+    Watcher -- "motion-triggered upload<br/>(EI_API_KEY)" --> EI
 
     classDef secret stroke-dasharray: 4 3;
-    class EI,EIA,Factory,Device secret;
+    class EI,Factory,Device secret;
 ```
 
 Two GitHub Actions workflows form the closed loop. ① watches EI for new data and produces a tagged release; ② reacts to that tag and pushes to the factory. From there Foundries' own CI takes over and the device polls for the new target.
@@ -69,31 +63,22 @@ The `app/app.yaml` shipped here wires this example into the App Lab `arduino:vid
 │   └── model/
 │       └── object-detection.eim          # descriptive filename; matches app.yaml
 ├── containers/
-│   ├── ei-vision/                        # main inference app (object detection / classification)
-│   │   ├── Dockerfile                    # debian:bookworm + edge-impulse-linux-runner
-│   │   ├── docker-compose.yml            # uses __FACTORY__ / __APP_NAME__ placeholders
-│   │   ├── docker-build.conf
-│   │   ├── model.eim                     # generic name the Dockerfile expects
-│   │   └── README.md
-│   └── anomaly-watcher/                  # OPTIONAL second app — visual-anomaly trigger
-│       ├── Dockerfile                    # python3 + edge_impulse_linux + opencv
-│       ├── docker-compose.yml            # uses __FACTORY__ / __ANOMALY_APP_NAME__ placeholders
+│   └── ei-vision/                        # mirrored into source.foundries.io/.../containers.git
+│       ├── Dockerfile                    # debian:bookworm + edge-impulse-linux-runner
+│       ├── docker-compose.yml            # uses __FACTORY__ / __APP_NAME__ placeholders
 │       ├── docker-build.conf
-│       ├── anomaly.eim                   # refreshed by ei-anomaly-watch-and-retrain.yml
-│       ├── anomaly-watcher.py
-│       ├── capture-and-upload.sh
+│       ├── model.eim                     # generic name the Dockerfile expects
 │       └── README.md
 ├── scripts/
 │   ├── refresh-model.sh                  # local equivalent of workflow ① build steps
 │   ├── register-device.sh                # non-interactive `fioup register --api-token` wrapper
 │   ├── capture-and-upload.sh             # grab frames on the UNO Q & POST to EI ingestion API
-│   └── anomaly-watcher.py                # run a visual-anomaly .eim live; on anomaly, trigger capture
+│   └── motion-watcher.py                 # OpenCV background subtraction; on motion, trigger capture
 ├── docs/images/                          # README screenshots
 ├── .dataset-state.json                   # mutable state (sample count, deployment version)
 ├── .github/workflows/
-│   ├── ei-data-watch-and-retrain.yml         # ①  main project watcher
-│   ├── ei-anomaly-watch-and-retrain.yml      # ①′ anomaly project watcher (optional)
-│   └── foundries-deploy.yml                  # ②  pushes both apps to containers.git
+│   ├── ei-data-watch-and-retrain.yml     # ①
+│   └── foundries-deploy.yml              # ②
 ├── LICENSE                               # MIT
 └── README.md
 ```
@@ -110,9 +95,6 @@ All project-specific values are GitHub Actions **repo variables**, not hardcoded
 | `EI_MODEL_TYPE`      | no       | `float32`            | `float32` or `int8`. Object detection usually needs `float32`         |
 | `EI_MODEL_FILENAME`  | no       | `object-detection.eim` | Filename under `app/model/`; should match the path in `app/app.yaml` |
 | `APP_NAME`           | no       | `ei-vision`          | Name of the directory under `containers/` AND of the Foundries app folder |
-| `EI_ANOMALY_PROJECT_ID`     | no | —                | EI project ID for an *additional* visual-anomaly model. Set this to enable the second OTA pipeline (see [Second app: anomaly watcher OTA](#second-app-anomaly-watcher-ota)). |
-| `EI_ANOMALY_MODEL_TYPE`     | no | `float32`         | `float32` or `int8` for the anomaly build                              |
-| `ANOMALY_APP_NAME`          | no | `anomaly-watcher` | Directory under `containers/` AND Foundries app folder for the anomaly watcher |
 
 Set them via the GitHub UI (*Settings → Secrets and variables → Actions → Variables*) or with `gh`:
 
@@ -323,63 +305,67 @@ Recognized env: `LABEL`, `CATEGORY` (`training`/`testing`), `COUNT`, `INTERVAL`,
 - For object-detection projects, samples uploaded with a generic label go into the EI Studio **Labeling queue** for bounding-box annotation. Workflow ① only retrains on what's labeled, so unlabeled queue items don't trigger immediate rebuilds.
 - To skip the wait for the hourly cron after uploading, kick the workflow manually: `gh workflow run ei-data-watch-and-retrain.yml -F force=true`.
 
-## Auto-capture on anomaly
+## Auto-capture on motion
 
-[`scripts/anomaly-watcher.py`](scripts/anomaly-watcher.py) turns the device into an active-learning data collector. It runs a **second** Edge Impulse model — a visual-anomaly detector that you train in a separate EI project — against the live camera feed. Whenever the anomaly score crosses a threshold, it hands the frame to `capture-and-upload.sh`, which uploads it to your **main** project's training (or testing) dataset. The next watcher-workflow tick retrains the object detector on those new "interesting" samples.
+[`scripts/motion-watcher.py`](scripts/motion-watcher.py) turns the UNO Q into an active-learning data collector with **no second model** — it runs OpenCV's MOG2 background subtractor, learns the static scene during a brief warmup, and triggers a capture whenever something significant enters the frame. The captured frame is handed to [`capture-and-upload.sh`](scripts/capture-and-upload.sh), which uploads it to your EI project's training (or testing) set. The next workflow ① tick retrains on the new samples.
 
 ```
-/dev/video0 → anomaly .eim (visual_anomaly_max ≥ THRESHOLD)
-                                  │
-                                  ▼
-                       capture-and-upload.sh
-                                  │
-                                  ▼
-                         Edge Impulse ingestion
-                                  │
-                                  ▼
-                  ei-data-watch-and-retrain.yml
-                  retrains object detection model
+/dev/video0 ─► MOG2 background subtraction ─► motion%, blob area
+                                                    │
+                       motion% ≥ THRESHOLD &        │
+                       blob ≥ MIN_AREA       ──────►│
+                                                    ▼
+                                       capture-and-upload.sh
+                                                    │
+                                                    ▼
+                                          EI ingestion API
+                                                    │
+                                                    ▼
+                                  ei-data-watch-and-retrain.yml
 ```
 
 **One-time setup on the UNO Q:**
 
 ```bash
-sudo apt install -y python3-pip python3-opencv ffmpeg
-pip3 install --user edge_impulse_linux
+sudo apt install -y python3-opencv ffmpeg
 ```
 
-**Provide the anomaly model.** Build the `.eim` from your visual-anomaly EI project — same flow as workflow ①, just run [`scripts/refresh-model.sh`](scripts/refresh-model.sh) locally with `EI_PROJECT_ID=<anomaly project id>` and copy `app/model/<file>.eim` to the UNO Q. Drop it next to the script:
+That's it — no `pip install`, no second `.eim`.
+
+**Run the watcher:**
 
 ```bash
-scp app/model/<file>.eim uno-q:~/scripts/anomaly.eim
-```
+sudo systemctl stop fioup        # release /dev/video0 from the inference container
 
-**Run the watcher** (the `EI_API_KEY` here is for the *target* project that should receive new samples — usually your object-detection project, not the anomaly project):
-
-```bash
-sudo systemctl stop fioup       # release /dev/video0 from the inference container
 EI_API_KEY=ei_xxx \
-  ANOMALY_MODEL=~/scripts/anomaly.eim \
-  THRESHOLD=5.0 COOLDOWN=10 \
-  CATEGORY=training LABEL=anomaly \
-  ./scripts/anomaly-watcher.py
+  THRESHOLD=1.5 MIN_AREA=5000 COOLDOWN=10 WARMUP=5 \
+  CATEGORY=training LABEL=motion \
+  ./scripts/motion-watcher.py
 ```
 
-Recognized env: `EI_API_KEY` (required), `ANOMALY_MODEL`, `THRESHOLD`, `COOLDOWN` (s between captures), `CATEGORY` (`training`/`testing`), `LABEL`, `DEVICE` (default `/dev/video0`), `MAX_UPLOADS` (cap per session, `0` = unlimited), `DEVICE_NAME`, `UPLOAD_SCRIPT`.
+Recognized env: `EI_API_KEY` (required), `THRESHOLD` (% of pixels in motion to trigger; default `1.5`), `MIN_AREA` (min contiguous blob in px², filters shadows/twitch; default `5000`), `COOLDOWN` (s between captures; default `10`), `WARMUP` (s of background-learning before any trigger; default `5`), `CATEGORY` (`training`/`testing`), `LABEL` (default `motion`), `DEVICE` (default `/dev/video0`), `MAX_UPLOADS` (cap per session, `0` = unlimited), `LEARNING_RATE` (MOG2 adaptation rate; default `0.001`).
 
-**Run it as a service** (optional). Drop a unit at `/etc/systemd/system/anomaly-watcher.service`:
+**Tuning notes:**
+
+- Lower `THRESHOLD` and `MIN_AREA` ⇒ more sensitive (more false positives from shadows/lighting).
+- Raise `WARMUP` if your scene needs longer to stabilize after the camera comes on.
+- Raise `COOLDOWN` if a single event is generating multiple correlated uploads.
+- Lower `LEARNING_RATE` (e.g. `0.0001`) makes the background model adapt more slowly — useful when objects sometimes sit still in frame and you don't want them dissolving into the background.
+
+**Run it as a service** (optional):
 
 ```ini
+# /etc/systemd/system/motion-watcher.service
 [Unit]
-Description=EI anomaly-driven data capture
+Description=Motion-triggered EI data capture
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Environment=EI_API_KEY=ei_xxx
-Environment=ANOMALY_MODEL=/home/arduino/scripts/anomaly.eim
-Environment=THRESHOLD=5.0
-ExecStart=/home/arduino/scripts/anomaly-watcher.py
+Environment=THRESHOLD=1.5
+Environment=MIN_AREA=5000
+ExecStart=/home/arduino/scripts/motion-watcher.py
 Restart=on-failure
 RestartSec=5
 
@@ -388,7 +374,7 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemctl enable --now anomaly-watcher
+sudo systemctl enable --now motion-watcher
 ```
 
 **Camera conflict:** the inference container and the watcher both want `/dev/video0`. Pick one of:
@@ -396,29 +382,6 @@ sudo systemctl enable --now anomaly-watcher
 - Stop the inference app while collecting data: `sudo systemctl stop fioup`.
 - Attach a second UVC camera and run the watcher with `DEVICE=/dev/video1`.
 - Cap collection sessions with `MAX_UPLOADS=N` so the watcher exits after N captures.
-
-## Second app: anomaly watcher OTA
-
-The anomaly watcher can also be shipped through the factory just like the main inference app — same EI → GitHub → Foundries → device pipeline, just for a second project. When you set `EI_ANOMALY_PROJECT_ID`, the repo grows a parallel pipeline:
-
-| Piece | What it does |
-|---|---|
-| [`containers/anomaly-watcher/`](containers/anomaly-watcher/) | Compose app: Debian + `python3-opencv` + `pip install edge_impulse_linux`, baking in `anomaly-watcher.py`, `capture-and-upload.sh`, and the latest `anomaly.eim`. |
-| [`.github/workflows/ei-anomaly-watch-and-retrain.yml`](.github/workflows/ei-anomaly-watch-and-retrain.yml) | Mirror of workflow ①, scoped to the anomaly project. Skips itself entirely when `EI_ANOMALY_PROJECT_ID` is unset. Runs at `:30` past every hour, offset from the main watcher. |
-| [`foundries-deploy.yml`](.github/workflows/foundries-deploy.yml) | Already extended — every `v*` tag now syncs **both** `containers/ei-vision/` and `containers/anomaly-watcher/` into the factory's `containers.git` (the second one only when `EI_ANOMALY_PROJECT_ID` is set). |
-
-**Enable it on your fork:**
-
-```bash
-gh variable set EI_ANOMALY_PROJECT_ID --repo <owner>/<repo> --body "67890"
-# optional overrides:
-gh variable set ANOMALY_APP_NAME      --repo <owner>/<repo> --body "anomaly-watcher"
-gh variable set EI_ANOMALY_MODEL_TYPE --repo <owner>/<repo> --body "float32"
-```
-
-Run the anomaly watcher workflow manually once with `force=true` to do the first build, or wait for its hourly tick. From then on every new sample in the anomaly project triggers retrain → tag → factory push → device update — same loop as the main model.
-
-**On the device** the anomaly watcher arrives as a normal Compose service. Set its env via `fioconfig` config-set or by editing the device's `/var/sota/sota.toml` `[pacman.compose_apps_env]` entry — at minimum `EI_API_KEY` (for the *target* project receiving samples). Use fioup's `pacman.compose_apps` to control whether the device runs `ei-vision`, `anomaly-watcher`, or both (camera-conflict caveats above still apply).
 
 ## App Lab alternative
 

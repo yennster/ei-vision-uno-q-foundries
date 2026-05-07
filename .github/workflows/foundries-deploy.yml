@@ -15,18 +15,15 @@ jobs:
   push-to-factory:
     runs-on: ubuntu-latest
     env:
-      FACTORY:          ${{ vars.FOUNDRIES_FACTORY }}
-      APP_NAME:         ${{ vars.APP_NAME || 'ei-vision' }}
-      ANOMALY_APP_NAME: ${{ vars.ANOMALY_APP_NAME || 'anomaly-watcher' }}
-      # Anomaly app is shipped only when EI_ANOMALY_PROJECT_ID is set.
-      SYNC_ANOMALY:     ${{ vars.EI_ANOMALY_PROJECT_ID != '' && 'yes' || 'no' }}
+      FACTORY:  ${{ vars.FOUNDRIES_FACTORY }}
+      APP_NAME: ${{ vars.APP_NAME || 'ei-vision' }}
     steps:
       - name: Validate config
         run: |
           if [ -z "${FACTORY}" ]; then
             echo "::error::Repo variable FOUNDRIES_FACTORY is not set."; exit 1
           fi
-          echo "factory=${FACTORY} app=${APP_NAME} sync_anomaly=${SYNC_ANOMALY} anomaly_app=${ANOMALY_APP_NAME}"
+          echo "factory=${FACTORY} app=${APP_NAME}"
 
       - name: Checkout this repo
         uses: actions/checkout@v4
@@ -38,11 +35,6 @@ jobs:
           test -d "containers/${APP_NAME}" \
             || { echo "containers/${APP_NAME} not found"; exit 1; }
           ls -la "containers/${APP_NAME}"
-          if [ "${SYNC_ANOMALY}" = "yes" ]; then
-            test -d "containers/${ANOMALY_APP_NAME}" \
-              || { echo "EI_ANOMALY_PROJECT_ID is set but containers/${ANOMALY_APP_NAME} is missing"; exit 1; }
-            ls -la "containers/${ANOMALY_APP_NAME}"
-          fi
 
       - name: Clone factory containers.git
         env:
@@ -61,29 +53,17 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Sync apps into factory repo (with templated compose)
+      - name: Sync app into factory repo (with templated compose)
         run: |
           set -euo pipefail
-
-          sync_app() {
-            local src=$1 name=$2 app_placeholder=$3
-            local dest="factory-containers/${name}"
-            rm -rf "${dest}"
-            cp -r "${src}" "${dest}"
-            if [ -f "${dest}/docker-compose.yml" ]; then
-              sed -i \
-                -e "s|__FACTORY__|${FACTORY}|g" \
-                -e "s|${app_placeholder}|${name}|g" \
-                "${dest}/docker-compose.yml"
-            fi
-          }
-
-          # Main inference app.
-          sync_app "containers/${APP_NAME}" "${APP_NAME}" "__APP_NAME__"
-
-          # Anomaly watcher app (only if configured).
-          if [ "${SYNC_ANOMALY}" = "yes" ]; then
-            sync_app "containers/${ANOMALY_APP_NAME}" "${ANOMALY_APP_NAME}" "__ANOMALY_APP_NAME__"
+          DEST="factory-containers/${APP_NAME}"
+          rm -rf "${DEST}"
+          cp -r "containers/${APP_NAME}" "${DEST}"
+          if [ -f "${DEST}/docker-compose.yml" ]; then
+            sed -i \
+              -e "s|__FACTORY__|${FACTORY}|g" \
+              -e "s|__APP_NAME__|${APP_NAME}|g" \
+              "${DEST}/docker-compose.yml"
           fi
 
       - name: Commit and push if changed
@@ -93,10 +73,9 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           git add "${APP_NAME}"
-          [ "${SYNC_ANOMALY}" = "yes" ] && git add "${ANOMALY_APP_NAME}" || true
           if git diff --cached --quiet; then
             echo "No changes to push."
             exit 0
           fi
-          git commit -m "sync from ${TAG_NAME} (${SOURCE_SHA})"
+          git commit -m "${APP_NAME}: sync from ${TAG_NAME} (${SOURCE_SHA})"
           git push origin HEAD:main
