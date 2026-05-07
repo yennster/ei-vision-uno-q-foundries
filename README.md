@@ -52,20 +52,26 @@ The `app/app.yaml` shipped here wires this example into the App Lab `arduino:vid
 
 ```
 .
-├── app/                         # Arduino App Lab source-of-truth
-│   ├── app.yaml                 # brick wiring (one of: object_detection, classification, ...)
+├── app/                                  # Arduino App Lab source-of-truth
+│   ├── app.yaml                          # brick wiring (object_detection, classification, ...)
 │   └── model/
-│       └── object-detection.eim # descriptive name; matches app.yaml
+│       └── object-detection.eim          # descriptive filename; matches app.yaml
 ├── containers/
-│   └── ei-vision/               # mirrored into source.foundries.io/.../containers.git
-│       ├── Dockerfile           # debian:bookworm + edge-impulse-linux-runner
-│       ├── docker-compose.yml   # uses __FACTORY__ / __APP_NAME__ placeholders
+│   └── ei-vision/                        # mirrored into source.foundries.io/.../containers.git
+│       ├── Dockerfile                    # debian:bookworm + edge-impulse-linux-runner
+│       ├── docker-compose.yml            # uses __FACTORY__ / __APP_NAME__ placeholders
 │       ├── docker-build.conf
-│       └── model.eim            # generic name the Dockerfile expects
-├── .dataset-state.json          # mutable state (sample count, last deployment version)
-└── .github/workflows/
-    ├── ei-data-watch-and-retrain.yml   # ①
-    └── foundries-deploy.yml            # ②
+│       ├── model.eim                     # generic name the Dockerfile expects
+│       └── README.md
+├── scripts/
+│   └── refresh-model.sh                  # local equivalent of workflow ① build steps
+├── docs/images/                          # README screenshots
+├── .dataset-state.json                   # mutable state (sample count, deployment version)
+├── .github/workflows/
+│   ├── ei-data-watch-and-retrain.yml     # ①
+│   └── foundries-deploy.yml              # ②
+├── LICENSE                               # MIT
+└── README.md
 ```
 
 ## Configuration
@@ -279,7 +285,7 @@ To repoint this template at your own Edge Impulse project:
 2. **Set repo secrets** `EI_API_KEY` and `FOUNDRIES_API_TOKEN` (see [Setup: GitHub secrets](#setup-github-secrets)).
 3. **(If you changed `APP_NAME`)** rename the dir: `git mv containers/ei-vision containers/<APP_NAME>`.
 4. **(If your project isn't object detection)** edit `app/app.yaml` to use the correct brick + variable from the [mapping table](#app-lab-brick-mapping).
-5. Run **Actions → Watch EI dataset, retrain, redeploy → Run workflow → `force=true`** to do a first build right away. The workflow will retrain, build, commit a new `.eim`, and tag a release. Tag push fires the deploy workflow automatically.
+5. Run **Actions → Watch EI dataset, retrain, redeploy → Run workflow** and set the `force` input to `true` to do a first build right away. The workflow will retrain, build, commit a new `.eim`, and tag a release. Tag push fires the deploy workflow automatically.
 6. [Register your UNO Q](#setup-register-your-uno-q-with-the-factory) and the device will pull the new target on its next poll.
 
 ## Links
