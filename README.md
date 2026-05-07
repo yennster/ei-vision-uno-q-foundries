@@ -26,6 +26,7 @@ flowchart TB
     WF1 -- "retrain + build<br/>(EI_API_KEY)" --> EI
     WF2 -- "FOUNDRIES_API_TOKEN" --> Factory
     Factory -- "aktualizr-lite poll" --> UnoQ
+    UnoQ -- "capture-and-upload.sh<br/>(EI_API_KEY)" --> EI
 
     classDef secret stroke-dasharray: 4 3;
     class EI,Factory,UnoQ secret;
@@ -65,7 +66,8 @@ The `app/app.yaml` shipped here wires this example into the App Lab `arduino:vid
 │       └── README.md
 ├── scripts/
 │   ├── refresh-model.sh                  # local equivalent of workflow ① build steps
-│   └── register-device.sh                # non-interactive `fioup register --api-token` wrapper
+│   ├── register-device.sh                # non-interactive `fioup register --api-token` wrapper
+│   └── capture-and-upload.sh             # grab frames on the UNO Q & POST to EI ingestion API
 ├── docs/images/                          # README screenshots
 ├── .dataset-state.json                   # mutable state (sample count, deployment version)
 ├── .github/workflows/
@@ -271,6 +273,31 @@ edge-impulse-linux-runner --model-file /app/model.eim --enable-camera --silent
 ```
 
 The runner serves a live preview + classification UI on port **4912**. With `/dev/video0` mapped through `docker-compose.yml`, any UVC USB camera attached to the UNO Q is used. This works for object detection, image classification, and visual anomaly models without code changes — `edge-impulse-linux-runner` introspects the `.eim`.
+
+## Capture training data on the device
+
+The UNO Q can feed its own retraining loop. [`scripts/capture-and-upload.sh`](scripts/capture-and-upload.sh) grabs frames from `/dev/video0` with `ffmpeg` and POSTs them to the Edge Impulse ingestion API. Once they land in the project, the next hourly run of workflow ① detects the new sample count and triggers a retrain → rebuild → tag → factory push → device update — without you touching anything else.
+
+**On the UNO Q:**
+
+```bash
+sudo apt install -y ffmpeg                           # one-time prerequisite
+
+# 10 unlabeled training frames, 2 s apart, default camera:
+EI_API_KEY=ei_xxx ./scripts/capture-and-upload.sh
+
+# 5 testing frames for the "lamp" class:
+EI_API_KEY=ei_xxx LABEL=lamp CATEGORY=testing COUNT=5 \
+    ./scripts/capture-and-upload.sh
+```
+
+Recognized env: `LABEL`, `CATEGORY` (`training`/`testing`), `COUNT`, `INTERVAL`, `DEVICE` (default `/dev/video0`), `WIDTH`/`HEIGHT`, `DEVICE_NAME`.
+
+**Caveats:**
+
+- If the inference container already holds `/dev/video0`, ffmpeg will fail or grab a black frame. Stop the container first (`sudo systemctl stop fioup`) or attach a second UVC camera and pass `DEVICE=/dev/video1`.
+- For object-detection projects, samples uploaded with a generic label go into the EI Studio **Labeling queue** for bounding-box annotation. Workflow ① only retrains on what's labeled, so unlabeled queue items don't trigger immediate rebuilds.
+- To skip the wait for the hourly cron after uploading, kick the workflow manually: `gh workflow run ei-data-watch-and-retrain.yml -F force=true`.
 
 ## App Lab alternative
 
