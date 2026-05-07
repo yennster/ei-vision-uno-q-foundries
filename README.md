@@ -58,6 +58,16 @@ curl -L -H "x-api-key: $EI_API_KEY" \
 
 ### 2. Ship to the Foundries factory
 
+**Automated (recommended):** [`.github/workflows/foundries-deploy.yml`](.github/workflows/foundries-deploy.yml) syncs `containers/ei-vision/` into the factory's `containers.git` whenever a `v*` tag is pushed. It can also be run manually via *Actions → Push to Foundries containers.git → Run workflow*.
+
+Required repo secret:
+
+| Secret                 | Value                                              |
+|------------------------|----------------------------------------------------|
+| `FOUNDRIES_API_TOKEN`  | A Foundries API token with write access to `containers.git` |
+
+**Manual fallback:**
+
 ```bash
 git clone https://source.foundries.io/factories/jenny/containers.git
 cp -r containers/ei-vision /path/to/containers.git/
