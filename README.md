@@ -1,4 +1,4 @@
-# ei-vision-uno-w-foundries
+# ei-vision-uno-q-foundries
 
 End-to-end **object detection on an Arduino UNO Q**, trained with **Edge Impulse**, packaged as an OCI container, and delivered over-the-air via a **Foundries.io** factory.
 
