@@ -56,6 +56,22 @@ curl -L -H "x-api-key: $EI_API_KEY" \
   "https://studio.edgeimpulse.com/v1/api/25483/deployment/download?type=arduino-uno-q&modelType=float32"
 ```
 
+### 1b. Auto-retrain on new data
+
+[`.github/workflows/ei-data-watch-and-retrain.yml`](.github/workflows/ei-data-watch-and-retrain.yml) runs hourly. It:
+
+1. Reads the current training+testing sample count from EI.
+2. Compares it to `lastTrainedSampleCount` in [`.dataset-state.json`](.dataset-state.json).
+3. If different (or `force=true` via manual dispatch): retrains the impulse, builds a new `arduino-uno-q` `.eim`, updates both copies of the model in this repo, bumps the patch version, and pushes a new `vX.Y.Z` tag.
+
+The new tag fires `foundries-deploy.yml`, completing the pipeline EI → GitHub → Foundries → device.
+
+Required repo secret:
+
+| Secret         | Purpose                                          |
+|----------------|--------------------------------------------------|
+| `EI_API_KEY`   | Edge Impulse project API key (read+deploy scope) |
+
 ### 2. Ship to the Foundries factory
 
 **Automated (recommended):** [`.github/workflows/foundries-deploy.yml`](.github/workflows/foundries-deploy.yml) syncs `containers/ei-vision/` into the factory's `containers.git` whenever a `v*` tag is pushed. It can also be run manually via *Actions → Push to Foundries containers.git → Run workflow*.

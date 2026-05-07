@@ -1,0 +1,179 @@
+name: Watch EI dataset, retrain, redeploy
+
+on:
+  schedule:
+    - cron: "0 * * * *"        # hourly
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Retrain even if sample count is unchanged"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ei-retrain
+  cancel-in-progress: false
+
+env:
+  EI_PROJECT_ID: 25483
+  EI_DEPLOY_TARGET: arduino-uno-q
+  EI_MODEL_TYPE: float32
+  EI_BASE: https://studio.edgeimpulse.com/v1/api
+
+jobs:
+  watch-and-retrain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read prior state
+        id: state
+        run: |
+          PRIOR=$(jq -r '.lastTrainedSampleCount // 0' .dataset-state.json)
+          echo "prior=$PRIOR" >> "$GITHUB_OUTPUT"
+
+      - name: Get current EI sample counts
+        id: counts
+        env:
+          EI_API_KEY: ${{ secrets.EI_API_KEY }}
+        run: |
+          if [ -z "${EI_API_KEY}" ]; then
+            echo "::error::EI_API_KEY secret not set"; exit 1
+          fi
+          TRAIN=$(curl -fsS -H "x-api-key: ${EI_API_KEY}" \
+            "${EI_BASE}/${EI_PROJECT_ID}/raw-data/count?category=training" | jq -r .count)
+          TEST=$(curl -fsS -H "x-api-key: ${EI_API_KEY}" \
+            "${EI_BASE}/${EI_PROJECT_ID}/raw-data/count?category=testing" | jq -r .count)
+          TOTAL=$((TRAIN + TEST))
+          echo "train=$TRAIN test=$TEST total=$TOTAL"
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether to retrain
+        id: decide
+        run: |
+          PRIOR=${{ steps.state.outputs.prior }}
+          TOTAL=${{ steps.counts.outputs.total }}
+          FORCE="${{ github.event.inputs.force }}"
+          if [ "$FORCE" = "true" ] || [ "$TOTAL" != "$PRIOR" ]; then
+            echo "Triggering retrain (prior=$PRIOR, current=$TOTAL, force=$FORCE)"
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No change (count=$TOTAL); skipping."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Retrain impulse
+        if: steps.decide.outputs.go == 'true'
+        env:
+          EI_API_KEY: ${{ secrets.EI_API_KEY }}
+        run: |
+          set -euo pipefail
+          JOB=$(curl -fsS -X POST -H "x-api-key: ${EI_API_KEY}" \
+            "${EI_BASE}/${EI_PROJECT_ID}/jobs/retrain" | jq -r .id)
+          if [ "$JOB" = "null" ] || [ -z "$JOB" ]; then
+            echo "::error::Failed to start retrain job"; exit 1
+          fi
+          echo "retrain job: $JOB"
+          for i in $(seq 1 180); do
+            STATUS=$(curl -fsS -H "x-api-key: ${EI_API_KEY}" \
+              "${EI_BASE}/${EI_PROJECT_ID}/jobs/${JOB}/status")
+            FIN=$(echo "$STATUS" | jq -r .job.finished)
+            if [ "$FIN" != "null" ] && [ -n "$FIN" ]; then
+              OK=$(echo "$STATUS" | jq -r .job.finishedSuccessful)
+              if [ "$OK" = "true" ]; then echo "retrain ok"; exit 0; fi
+              echo "::error::retrain failed: $STATUS"; exit 1
+            fi
+            echo "[$i] retrain in progress..."
+            sleep 30
+          done
+          echo "::error::retrain timed out"; exit 1
+
+      - name: Build .eim for arduino-uno-q
+        if: steps.decide.outputs.go == 'true'
+        id: build
+        env:
+          EI_API_KEY: ${{ secrets.EI_API_KEY }}
+        run: |
+          set -euo pipefail
+          BUILD=$(curl -fsS -X POST -H "x-api-key: ${EI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"engine\":\"tflite\",\"modelType\":\"${EI_MODEL_TYPE}\"}" \
+            "${EI_BASE}/${EI_PROJECT_ID}/jobs/build-ondevice-model?type=${EI_DEPLOY_TARGET}")
+          JOB=$(echo "$BUILD" | jq -r .id)
+          DV=$(echo "$BUILD"  | jq -r .deploymentVersion)
+          echo "build job: $JOB (deployment v$DV)"
+          for i in $(seq 1 60); do
+            STATUS=$(curl -fsS -H "x-api-key: ${EI_API_KEY}" \
+              "${EI_BASE}/${EI_PROJECT_ID}/jobs/${JOB}/status")
+            FIN=$(echo "$STATUS" | jq -r .job.finished)
+            if [ "$FIN" != "null" ] && [ -n "$FIN" ]; then
+              OK=$(echo "$STATUS" | jq -r .job.finishedSuccessful)
+              if [ "$OK" != "true" ]; then echo "::error::build failed: $STATUS"; exit 1; fi
+              break
+            fi
+            echo "[$i] build in progress..."
+            sleep 20
+          done
+          echo "deployment_version=$DV" >> "$GITHUB_OUTPUT"
+
+      - name: Download .eim
+        if: steps.decide.outputs.go == 'true'
+        env:
+          EI_API_KEY: ${{ secrets.EI_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl -fsSL -H "x-api-key: ${EI_API_KEY}" \
+            -o app/model/object-detection.eim \
+            "${EI_BASE}/${EI_PROJECT_ID}/deployment/download?type=${EI_DEPLOY_TARGET}&modelType=${EI_MODEL_TYPE}"
+          chmod +x app/model/object-detection.eim
+          cp app/model/object-detection.eim containers/ei-vision/object-detection.eim
+          file app/model/object-detection.eim
+          ls -lh app/model/object-detection.eim
+
+      - name: Update state file
+        if: steps.decide.outputs.go == 'true'
+        run: |
+          jq --argjson t ${{ steps.counts.outputs.total }} \
+             --argjson v ${{ steps.build.outputs.deployment_version }} \
+             '.lastTrainedSampleCount=$t | .deploymentVersion=$v' \
+             .dataset-state.json > .dataset-state.json.new
+          mv .dataset-state.json.new .dataset-state.json
+          cat .dataset-state.json
+
+      - name: Compute next tag
+        if: steps.decide.outputs.go == 'true'
+        id: tag
+        run: |
+          LAST=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          if [ -z "$LAST" ]; then NEXT=v0.1.0; else
+            MAJOR=$(echo "$LAST" | sed -E 's/^v([0-9]+)\..*/\1/')
+            MINOR=$(echo "$LAST" | sed -E 's/^v[0-9]+\.([0-9]+)\..*/\1/')
+            PATCH=$(echo "$LAST" | sed -E 's/^v[0-9]+\.[0-9]+\.([0-9]+).*/\1/')
+            NEXT="v${MAJOR}.${MINOR}.$((PATCH+1))"
+          fi
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Next tag: $NEXT"
+
+      - name: Commit, tag, push
+        if: steps.decide.outputs.go == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/model/object-detection.eim \
+                  containers/ei-vision/object-detection.eim \
+                  .dataset-state.json
+          if git diff --cached --quiet; then
+            echo "Model bytes unchanged after retrain; nothing to commit."
+            exit 0
+          fi
+          git commit -m "ei: retrain on ${{ steps.counts.outputs.total }} samples → ${{ steps.tag.outputs.next }}"
+          git push origin main
+          git tag -a "${{ steps.tag.outputs.next }}" \
+            -m "Auto-retrain: ${{ steps.counts.outputs.total }} samples"
+          git push origin "${{ steps.tag.outputs.next }}"
