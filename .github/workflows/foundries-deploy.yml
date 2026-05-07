@@ -1,0 +1,66 @@
+name: Push to Foundries containers.git
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag or ref to deploy (must already exist in this repo)"
+        required: true
+        default: "v0.1.0"
+
+jobs:
+  push-to-factory:
+    runs-on: ubuntu-latest
+    env:
+      FACTORY: jenny
+      APP_NAME: ei-vision
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref_name }}
+
+      - name: Verify app folder exists
+        run: |
+          test -d "containers/${APP_NAME}" \
+            || { echo "containers/${APP_NAME} not found"; exit 1; }
+          ls -la "containers/${APP_NAME}"
+
+      - name: Clone factory containers.git
+        env:
+          FOUNDRIES_API_TOKEN: ${{ secrets.FOUNDRIES_API_TOKEN }}
+        run: |
+          if [ -z "${FOUNDRIES_API_TOKEN}" ]; then
+            echo "FOUNDRIES_API_TOKEN secret is not set"; exit 1
+          fi
+          git clone --depth=1 \
+            "https://api-token:${FOUNDRIES_API_TOKEN}@source.foundries.io/factories/${FACTORY}/containers.git" \
+            factory-containers
+
+      - name: Configure git identity
+        working-directory: factory-containers
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync app into factory repo
+        run: |
+          rm -rf "factory-containers/${APP_NAME}"
+          cp -r "containers/${APP_NAME}" "factory-containers/${APP_NAME}"
+
+      - name: Commit and push if changed
+        working-directory: factory-containers
+        env:
+          TAG_NAME: ${{ github.event.inputs.ref || github.ref_name }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          git add "${APP_NAME}"
+          if git diff --cached --quiet; then
+            echo "No changes to push."
+            exit 0
+          fi
+          git commit -m "${APP_NAME}: sync from ${TAG_NAME} (${SOURCE_SHA})"
+          git push origin HEAD:main
