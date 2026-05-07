@@ -171,7 +171,7 @@ sudo fioup register --factory <FOUNDRIES_FACTORY> --name <DEVICE_NAME>
 
 `fioup` prints a one-time URL and user code. Open it in your browser and authorize the device (link expires in 15 minutes). When it returns `Device is now registered.`, registration is complete and the mTLS material is stored under `/var/sota/`.
 
-*Non-interactive (API token — useful for fleet provisioning or headless boards without a paired workstation):*
+**2a. Non-interactive (API token — useful for fleet provisioning or headless boards without a paired workstation):**
 
 [`scripts/register-device.sh`](scripts/register-device.sh) wraps fioup's hidden `--api-token` flag, registers the device, runs `fioup check`, and enables the systemd service. Copy the script to the device and run:
 
