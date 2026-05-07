@@ -85,6 +85,67 @@ gh secret list                    --repo <owner>/<repo>   # verify both are pres
 
 These secrets are encrypted and only exposed to workflow runs at execution time. Rotate them in Edge Impulse / Foundries first, then re-run `gh secret set` to update GitHub.
 
+## Setup: Register your UNO Q with the factory
+
+Before any OTA target can land on the device, the UNO Q has to enroll itself with the factory using **fioup** (Foundries' container-only OTA client). Once registered, the device polls for new targets and runs whatever the factory has built — including `ei-vision`. Reference: <https://docs.foundries.io/96/getting-started/fioup-registration/index.html>.
+
+Run these on the **UNO Q itself** (over SSH or a serial console; the UNO Q runs Debian on aarch64):
+
+**1. Install fioup from the official apt repo**
+
+```bash
+sudo apt update && sudo apt install -y apt-transport-https ca-certificates curl gnupg
+
+curl -L https://fioup.foundries.io/pkg/deb/dists/stable/Release.gpg \
+  | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/fioup-stable.gpg
+
+echo 'deb [signed-by=/etc/apt/trusted.gpg.d/fioup-stable.gpg] https://fioup.foundries.io/pkg/deb stable main' \
+  | sudo tee /etc/apt/sources.list.d/fioup.list
+
+sudo apt update && sudo apt install -y fioup
+```
+
+You also need a recent Docker stack on the device:
+
+```bash
+sudo apt install -y docker.io docker-compose-v2
+```
+
+**2. Register the device against your factory**
+
+```bash
+sudo fioup register --factory jenny --name uno-q-01
+```
+
+`fioup` prints a one-time URL and user code. Open it in your browser and authorize the device (link expires in 15 minutes). When it returns `Device is now registered.`, registration is complete and the mTLS material is stored under `/var/sota/`.
+
+**3. Verify connectivity**
+
+```bash
+sudo fioup check
+```
+
+The device should now appear at <https://app.foundries.io/factories/jenny/devices/>.
+
+**4. Enable the update service** so the device polls for and applies new targets automatically:
+
+```bash
+sudo systemctl enable --now fioup
+```
+
+**(Optional) Restrict which apps run.** By default, `fioup` runs every app the factory ships. To run only `ei-vision`:
+
+```bash
+sudo tee -a /var/sota/sota.toml >/dev/null <<'EOF'
+
+[pacman]
+compose_apps = "ei-vision"
+EOF
+sudo systemctl restart fioup
+```
+
+Once the device is registered, every tag pushed by the workflows above flows automatically: GitHub Actions → factory `containers.git` → factory CI → OTA target → `fioup` on the device → running container.
+
 ## Pipeline
 
 ### 1. Build the Edge Impulse model
