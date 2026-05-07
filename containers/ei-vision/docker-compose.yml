@@ -1,8 +1,12 @@
 version: '3.2'
 
+# Placeholders __FACTORY__ and __APP_NAME__ are substituted by
+# .github/workflows/foundries-deploy.yml before this file is pushed
+# into the factory's containers.git.
+
 services:
-  ei-vision:
-    image: hub.foundries.io/jenny/ei-vision:latest
+  __APP_NAME__:
+    image: hub.foundries.io/__FACTORY__/__APP_NAME__:latest
     restart: always
     ports:
       - "4912:4912"

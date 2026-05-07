@@ -18,15 +18,24 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  EI_PROJECT_ID: 25483
-  EI_DEPLOY_TARGET: arduino-uno-q
-  EI_MODEL_TYPE: float32
+  EI_PROJECT_ID:     ${{ vars.EI_PROJECT_ID }}
+  EI_DEPLOY_TARGET:  ${{ vars.EI_DEPLOY_TARGET  || 'arduino-uno-q' }}
+  EI_MODEL_TYPE:     ${{ vars.EI_MODEL_TYPE     || 'float32' }}
+  EI_MODEL_FILENAME: ${{ vars.EI_MODEL_FILENAME || 'object-detection.eim' }}
+  APP_NAME:          ${{ vars.APP_NAME          || 'ei-vision' }}
   EI_BASE: https://studio.edgeimpulse.com/v1/api
 
 jobs:
   watch-and-retrain:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate config
+        run: |
+          if [ -z "${EI_PROJECT_ID}" ]; then
+            echo "::error::Repo variable EI_PROJECT_ID is not set."; exit 1
+          fi
+          echo "project=${EI_PROJECT_ID} target=${EI_DEPLOY_TARGET} type=${EI_MODEL_TYPE} file=${EI_MODEL_FILENAME} app=${APP_NAME}"
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -94,7 +103,7 @@ jobs:
           done
           echo "::error::retrain timed out"; exit 1
 
-      - name: Build .eim for arduino-uno-q
+      - name: Build .eim
         if: steps.decide.outputs.go == 'true'
         id: build
         env:
@@ -128,20 +137,23 @@ jobs:
           EI_API_KEY: ${{ secrets.EI_API_KEY }}
         run: |
           set -euo pipefail
+          mkdir -p "app/model" "containers/${APP_NAME}"
+          # Source-of-truth copy keeps the descriptive filename so app.yaml stays valid.
           curl -fsSL -H "x-api-key: ${EI_API_KEY}" \
-            -o app/model/object-detection.eim \
+            -o "app/model/${EI_MODEL_FILENAME}" \
             "${EI_BASE}/${EI_PROJECT_ID}/deployment/download?type=${EI_DEPLOY_TARGET}&modelType=${EI_MODEL_TYPE}"
-          chmod +x app/model/object-detection.eim
-          cp app/model/object-detection.eim containers/ei-vision/object-detection.eim
-          file app/model/object-detection.eim
-          ls -lh app/model/object-detection.eim
+          chmod +x "app/model/${EI_MODEL_FILENAME}"
+          # Container payload uses a fixed filename so the Dockerfile is generic.
+          cp "app/model/${EI_MODEL_FILENAME}" "containers/${APP_NAME}/model.eim"
+          file "app/model/${EI_MODEL_FILENAME}"
+          ls -lh "app/model/${EI_MODEL_FILENAME}"
 
       - name: Update state file
         if: steps.decide.outputs.go == 'true'
         run: |
           jq --argjson t ${{ steps.counts.outputs.total }} \
              --argjson v ${{ steps.build.outputs.deployment_version }} \
-             '.lastTrainedSampleCount=$t | .deploymentVersion=$v' \
+             '.lastTrainedSampleCount=$t | .lastDeploymentVersion=$v' \
              .dataset-state.json > .dataset-state.json.new
           mv .dataset-state.json.new .dataset-state.json
           cat .dataset-state.json
@@ -165,8 +177,8 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/model/object-detection.eim \
-                  containers/ei-vision/object-detection.eim \
+          git add "app/model/${EI_MODEL_FILENAME}" \
+                  "containers/${APP_NAME}/model.eim" \
                   .dataset-state.json
           if git diff --cached --quiet; then
             echo "Model bytes unchanged after retrain; nothing to commit."

@@ -1,20 +1,22 @@
 # ei-vision-uno-q-foundries
 
-End-to-end **object detection on an Arduino UNO Q**, trained with **Edge Impulse**, packaged as an OCI container, and delivered over-the-air via a **Foundries.io** factory.
+A reusable template that takes **any Edge Impulse vision project**, builds it for the **Arduino UNO Q**, and delivers it over-the-air through a **Foundries.io** factory — with auto-retraining on every new data upload.
 
-> Detects `coffee` and `lamp` from a USB camera at 320×320, float32 FOMO, on the UNO Q's aarch64 CPU.
+> Object detection, image classification, and visual anomaly models all work; only the App Lab brick choice changes (see [App Lab brick mapping](#app-lab-brick-mapping)).
+
+This repo ships a working coffee/lamp object detector as the bundled example — see [Included example](#included-example).
 
 ## Architecture
 
 ```
                        ┌─────────────────────────────────────────────────────┐
-                       │ GitHub repo  yennster/ei-vision-uno-q-foundries     │
+                       │ GitHub repo  <owner>/<repo>                         │
                        │                                                     │
    new training data   │  ┌──────────────────────────────────────────────┐   │
    ┌──────────────┐ ◄──┼──┤ ① ei-data-watch-and-retrain.yml  (hourly)    │   │
    │ Edge Impulse │    │  │   • compares EI sample count vs              │   │
-   │ project 25483│ ───┼─►│     .dataset-state.json                      │   │
-   │ (FOMO 320x320)│   │  │   • POST /jobs/retrain → poll                │   │
+   │ project      │ ───┼─►│     .dataset-state.json                      │   │
+   │ vars.EI_PROJECT_ID │  │   • POST /jobs/retrain → poll                │   │
    └──────────────┘    │  │   • POST /jobs/build-ondevice-model          │   │
         ▲              │  │   • download .eim → commit → push vX.Y.Z tag │   │
         │              │  └─────────────────────┬────────────────────────┘   │
@@ -23,48 +25,91 @@ End-to-end **object detection on an Arduino UNO Q**, trained with **Edge Impulse
                        │  ┌──────────────────────────────────────────────┐   │
                        │  │ ② foundries-deploy.yml  (on v* tag)          │   │
                        │  │   • clone factory containers.git             │   │
-                       │  │   • sync containers/ei-vision/ → ei-vision/  │   │
+                       │  │   • template compose with FACTORY/APP_NAME   │   │
                        │  │   • git push                                 │   │
                        │  └─────────────────────┬────────────────────────┘   │
                        └────────────────────────┼────────────────────────────┘
                                                 │ FOUNDRIES_API_TOKEN
                                                 ▼
-                                ┌────────────────────────────┐
-                                │ Foundries factory: jenny   │
-                                │ container-main CI builds   │
-                                │ arm64 OTA target           │
-                                └────────────┬───────────────┘
-                                             │ aktualizr-lite poll
-                                             ▼
-                                ┌────────────────────────────┐
-                                │ Arduino UNO Q              │
-                                │ pulls + runs ei-vision     │
-                                │ edge-impulse-linux-runner  │
-                                │ on /dev/video0  →  :4912   │
-                                └────────────────────────────┘
+                                ┌────────────────────────────────────┐
+                                │ Foundries factory                  │
+                                │ vars.FOUNDRIES_FACTORY             │
+                                │ container-main CI builds arm64 OTA │
+                                └────────────────┬───────────────────┘
+                                                 │ aktualizr-lite poll
+                                                 ▼
+                                ┌────────────────────────────────────┐
+                                │ Arduino UNO Q                      │
+                                │ pulls + runs <APP_NAME>            │
+                                │ edge-impulse-linux-runner          │
+                                │ on /dev/video0  →  :4912           │
+                                └────────────────────────────────────┘
 ```
 
 Two GitHub Actions workflows form the closed loop. ① watches EI for new data and produces a tagged release; ② reacts to that tag and pushes to the factory. From there Foundries' own CI takes over and the device polls for the new target.
+
+## Included example
+
+| Property        | Value                                                          |
+|-----------------|----------------------------------------------------------------|
+| Source          | Edge Impulse project [25483 — *Tutorial: object detection*](https://studio.edgeimpulse.com/studio/25483) |
+| Type            | Object detection (FOMO)                                        |
+| Classes         | `coffee`, `lamp`                                               |
+| Input           | 320×320 RGB, `fit-short` resize                                |
+| Architecture    | aarch64 ELF (Linux 3.7+)                                       |
+| Quantization    | float32                                                        |
+| Size            | ~25 MB                                                         |
+| Files           | `app/model/object-detection.eim` *(source-of-truth, named for App Lab)*  ·  `containers/ei-vision/model.eim` *(generic name baked into the container)* |
+
+The `app/app.yaml` shipped here wires this example into the App Lab `arduino:video_object_detection` brick. To swap in your own model, see [Adapt for a different EI project](#adapt-for-a-different-ei-project).
 
 ## Repo layout
 
 ```
 .
 ├── app/                         # Arduino App Lab source-of-truth
-│   ├── app.yaml                 # video_object_detection brick + web_ui
+│   ├── app.yaml                 # brick wiring (one of: object_detection, classification, ...)
 │   └── model/
-│       └── object-detection.eim # aarch64 ELF, ~25 MB, float32 FOMO
-└── containers/
-    └── ei-vision/               # mirrored into source.foundries.io/.../containers.git
-        ├── Dockerfile           # debian:bookworm + edge-impulse-linux-runner
-        ├── docker-compose.yml   # /dev/video0 passthrough, port 4912
-        ├── docker-build.conf
-        └── README.md
+│       └── object-detection.eim # descriptive name; matches app.yaml
+├── containers/
+│   └── ei-vision/               # mirrored into source.foundries.io/.../containers.git
+│       ├── Dockerfile           # debian:bookworm + edge-impulse-linux-runner
+│       ├── docker-compose.yml   # uses __FACTORY__ / __APP_NAME__ placeholders
+│       ├── docker-build.conf
+│       └── model.eim            # generic name the Dockerfile expects
+├── .dataset-state.json          # mutable state (sample count, last deployment version)
+└── .github/workflows/
+    ├── ei-data-watch-and-retrain.yml   # ①
+    └── foundries-deploy.yml            # ②
+```
+
+## Configuration
+
+All project-specific values are GitHub Actions **repo variables**, not hardcoded — set once on your fork.
+
+| Variable             | Required | Default              | Notes                                                                 |
+|----------------------|----------|----------------------|-----------------------------------------------------------------------|
+| `EI_PROJECT_ID`      | yes      | —                    | Numeric Edge Impulse project ID                                       |
+| `FOUNDRIES_FACTORY`  | yes      | —                    | Your factory name (the `<factory>` in `source.foundries.io/factories/<factory>`) |
+| `EI_DEPLOY_TARGET`   | no       | `arduino-uno-q`      | EI deployment target name; only override if you're targeting a different board |
+| `EI_MODEL_TYPE`      | no       | `float32`            | `float32` or `int8`. Object detection usually needs `float32`         |
+| `EI_MODEL_FILENAME`  | no       | `object-detection.eim` | Filename under `app/model/`; should match the path in `app/app.yaml` |
+| `APP_NAME`           | no       | `ei-vision`          | Name of the directory under `containers/` AND of the Foundries app folder |
+
+Set them via the GitHub UI (*Settings → Secrets and variables → Actions → Variables*) or with `gh`:
+
+```bash
+gh variable set EI_PROJECT_ID     --repo <owner>/<repo> --body "12345"
+gh variable set FOUNDRIES_FACTORY --repo <owner>/<repo> --body "my-factory"
+# optional overrides:
+gh variable set EI_MODEL_TYPE     --repo <owner>/<repo> --body "int8"
+gh variable set APP_NAME          --repo <owner>/<repo> --body "widget-detector"
+gh variable list                  --repo <owner>/<repo>
 ```
 
 ## Setup: GitHub secrets
 
-The two automation workflows below need credentials. Set them once on your fork:
+The two automation workflows need credentials. Set them once on your fork:
 
 | Secret                 | Used by                                  | Where to get it                                                                 |
 |------------------------|------------------------------------------|---------------------------------------------------------------------------------|
@@ -87,7 +132,7 @@ These secrets are encrypted and only exposed to workflow runs at execution time.
 
 ## Setup: Register your UNO Q with the factory
 
-Before any OTA target can land on the device, the UNO Q has to enroll itself with the factory using **fioup** (Foundries' container-only OTA client). Once registered, the device polls for new targets and runs whatever the factory has built — including `ei-vision`. Reference: <https://docs.foundries.io/96/getting-started/fioup-registration/index.html>.
+Before any OTA target can land on the device, the UNO Q has to enroll itself with the factory using **fioup** (Foundries' container-only OTA client). Once registered, the device polls for new targets and runs whatever the factory has built. Reference: <https://docs.foundries.io/96/getting-started/fioup-registration/index.html>.
 
 Run these on the **UNO Q itself** — the board runs Debian on aarch64. Two ways to get a shell:
 
@@ -119,7 +164,7 @@ sudo apt install -y docker.io docker-compose-v2
 **2. Register the device against your factory**
 
 ```bash
-sudo fioup register --factory jenny --name uno-q-01
+sudo fioup register --factory <FOUNDRIES_FACTORY> --name <DEVICE_NAME>
 ```
 
 `fioup` prints a one-time URL and user code. Open it in your browser and authorize the device (link expires in 15 minutes). When it returns `Device is now registered.`, registration is complete and the mTLS material is stored under `/var/sota/`.
@@ -130,7 +175,7 @@ sudo fioup register --factory jenny --name uno-q-01
 sudo fioup check
 ```
 
-The device should now appear at <https://app.foundries.io/factories/jenny/devices/>.
+The device should now appear at `https://app.foundries.io/factories/<FOUNDRIES_FACTORY>/devices/`.
 
 **4. Enable the update service** so the device polls for and applies new targets automatically:
 
@@ -138,13 +183,13 @@ The device should now appear at <https://app.foundries.io/factories/jenny/device
 sudo systemctl enable --now fioup
 ```
 
-**(Optional) Restrict which apps run.** By default, `fioup` runs every app the factory ships. To run only `ei-vision`:
+**(Optional) Restrict which apps run.** By default, `fioup` runs every app the factory ships. To run only the app from this repo:
 
 ```bash
-sudo tee -a /var/sota/sota.toml >/dev/null <<'EOF'
+sudo tee -a /var/sota/sota.toml >/dev/null <<EOF
 
 [pacman]
-compose_apps = "ei-vision"
+compose_apps = "<APP_NAME>"
 EOF
 sudo systemctl restart fioup
 ```
@@ -153,102 +198,85 @@ Once the device is registered, every tag pushed by the workflows above flows aut
 
 ## Pipeline
 
-### 1. Build the Edge Impulse model
-
-The model is built from project **25483 / "Tutorial: object detection"** with the **Arduino UNO Q** deployment target, `float32` model variant.
-
-```bash
-curl -X POST -H "x-api-key: $EI_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"engine":"tflite","modelType":"float32"}' \
-  "https://studio.edgeimpulse.com/v1/api/25483/jobs/build-ondevice-model?type=arduino-uno-q"
-
-# poll /jobs/{id}/status, then:
-curl -L -H "x-api-key: $EI_API_KEY" \
-  -o app/model/object-detection.eim \
-  "https://studio.edgeimpulse.com/v1/api/25483/deployment/download?type=arduino-uno-q&modelType=float32"
-```
-
-### 1b. Auto-retrain on new data
+### ① Auto-retrain on new data
 
 [`.github/workflows/ei-data-watch-and-retrain.yml`](.github/workflows/ei-data-watch-and-retrain.yml) runs hourly. It:
 
 1. Reads the current training+testing sample count from EI.
 2. Compares it to `lastTrainedSampleCount` in [`.dataset-state.json`](.dataset-state.json).
-3. If different (or `force=true` via manual dispatch): retrains the impulse, builds a new `arduino-uno-q` `.eim`, updates both copies of the model in this repo, bumps the patch version, and pushes a new `vX.Y.Z` tag.
+3. If different (or `force=true` via manual dispatch): retrains the impulse, builds a new `.eim` for `EI_DEPLOY_TARGET`, updates both the descriptive copy (`app/model/${EI_MODEL_FILENAME}`) and the generic container copy (`containers/${APP_NAME}/model.eim`), bumps the patch version, and pushes a new `vX.Y.Z` tag.
 
-The new tag fires `foundries-deploy.yml`, completing the pipeline EI → GitHub → Foundries → device.
+Uses the `EI_API_KEY` secret and all of the variables in [Configuration](#configuration).
 
-Uses the `EI_API_KEY` secret (see [Setup: GitHub secrets](#setup-github-secrets)).
+### ② Ship to the Foundries factory
 
-### 2. Ship to the Foundries factory
+[`.github/workflows/foundries-deploy.yml`](.github/workflows/foundries-deploy.yml) syncs `containers/${APP_NAME}/` into the factory's `containers.git` whenever a `v*` tag is pushed (or via *Actions → Run workflow* manually). Before pushing, it substitutes `__FACTORY__` and `__APP_NAME__` in `docker-compose.yml` so the image reference (`hub.foundries.io/<factory>/<app>:latest`) is correct for your factory.
 
-**Automated (recommended):** [`.github/workflows/foundries-deploy.yml`](.github/workflows/foundries-deploy.yml) syncs `containers/ei-vision/` into the factory's `containers.git` whenever a `v*` tag is pushed. It can also be run manually via *Actions → Push to Foundries containers.git → Run workflow*.
+Uses the `FOUNDRIES_API_TOKEN` secret.
 
-Uses the `FOUNDRIES_API_TOKEN` secret (see [Setup: GitHub secrets](#setup-github-secrets)).
-
-**Manual fallback:**
+**Manual fallback** if you don't want to run the workflow:
 
 ```bash
-git clone https://source.foundries.io/factories/jenny/containers.git
-cp -r containers/ei-vision /path/to/containers.git/
+git clone https://source.foundries.io/factories/<FOUNDRIES_FACTORY>/containers.git
+cp -r containers/<APP_NAME> /path/to/containers.git/
+# edit docker-compose.yml and replace __FACTORY__ / __APP_NAME__
 cd /path/to/containers.git
-git add ei-vision && git commit -m "ei-vision: add EI object detection container"
+git add <APP_NAME> && git commit -m "<APP_NAME>: initial app"
 git push  # triggers container-main CI build → OTA target
 ```
 
-### 3. Device pulls the new target
+### ③ Device pulls the new target
 
-Any UNO Q registered to the `jenny` factory with the `main` tag will, on its next aktualizr-lite poll, pull the new arm64 image and start the `ei-vision` Compose service. Inference is exposed on `:4912`.
+Any UNO Q registered to the factory (with the `main` tag, by default) pulls the new arm64 image and starts the Compose service on its next aktualizr-lite poll. Inference is exposed on `:4912`.
 
 ## Container behavior
 
 The container runs Edge Impulse's official Linux runner against the bundled `.eim`:
 
 ```
-edge-impulse-linux-runner --model-file /app/object-detection.eim --enable-camera --silent
+edge-impulse-linux-runner --model-file /app/model.eim --enable-camera --silent
 ```
 
-The runner serves a live preview + classification UI on port **4912**. With `/dev/video0` mapped through `docker-compose.yml`, any UVC USB camera attached to the UNO Q is used.
+The runner serves a live preview + classification UI on port **4912**. With `/dev/video0` mapped through `docker-compose.yml`, any UVC USB camera attached to the UNO Q is used. This works for object detection, image classification, and visual anomaly models without code changes — `edge-impulse-linux-runner` introspects the `.eim`.
 
 ## App Lab alternative
 
-`app/app.yaml` describes the same model wired through the Arduino App Lab `arduino:video_object_detection` brick. App Lab expects the model at:
+`app/app.yaml` describes the same model wired through an Arduino App Lab brick. App Lab expects the model at:
 
 ```
-/home/arduino/.arduino-bricks/ei-models/object-detection.eim
+/home/arduino/.arduino-bricks/ei-models/<EI_MODEL_FILENAME>
 ```
 
-This path is the canonical location for App Lab brick consumption when running outside the Compose-app pipeline.
+This is the canonical brick path when running outside the Compose-app pipeline.
 
-## Model
+### App Lab brick mapping
 
-| Property        | Value                                            |
-|-----------------|--------------------------------------------------|
-| Source          | Edge Impulse project 25483                       |
-| Architecture    | aarch64 ELF (Linux 3.7+)                         |
-| Input           | 320×320 RGB, `fit-short` resize                  |
-| Type            | Object detection (FOMO)                          |
-| Classes         | `coffee`, `lamp`                                 |
-| Quantization    | float32                                          |
-| Size            | ~25 MB                                           |
+| EI project type        | Brick                                  | Variable in `app.yaml`            |
+|------------------------|----------------------------------------|-----------------------------------|
+| Object detection       | `arduino:video_object_detection`       | `EI_OBJ_DETECTION_MODEL`          |
+| Image classification   | `arduino:video_classification`         | `EI_CLASSIFICATION_MODEL`         |
+| Visual anomaly         | `arduino:visual_anomaly_detection`     | `EI_V_ANOMALY_DETECTION_MODEL`    |
+| Keyword spotting       | `arduino:keyword_spotting`             | `EI_KEYWORD_SPOTTING_MODEL`       |
+| Audio classification   | `arduino:audio_classification`         | `EI_AUDIO_CLASSIFICATION_MODEL`   |
+| Motion / IMU           | `arduino:motion_detection`             | `EI_MOTION_DETECTION_MODEL`       |
 
-## Refresh the model
+## Adapt for a different EI project
 
-To rebuild from a newer Edge Impulse training run:
+To repoint this template at your own Edge Impulse project:
 
-```bash
-EI_API_KEY=<your key> ./scripts/refresh-model.sh   # see scripts/
-```
-
-(Or rerun step 1 above and commit the new `.eim`.)
+1. **Set repo variables** for `EI_PROJECT_ID` and `FOUNDRIES_FACTORY` (see [Configuration](#configuration)). Set `APP_NAME`, `EI_MODEL_TYPE`, `EI_MODEL_FILENAME` if the defaults don't fit.
+2. **Set repo secrets** `EI_API_KEY` and `FOUNDRIES_API_TOKEN` (see [Setup: GitHub secrets](#setup-github-secrets)).
+3. **(If you changed `APP_NAME`)** rename the dir: `git mv containers/ei-vision containers/<APP_NAME>`.
+4. **(If your project isn't object detection)** edit `app/app.yaml` to use the correct brick + variable from the [mapping table](#app-lab-brick-mapping).
+5. Run **Actions → Watch EI dataset, retrain, redeploy → Run workflow → `force=true`** to do a first build right away. The workflow will retrain, build, commit a new `.eim`, and tag a release. Tag push fires the deploy workflow automatically.
+6. [Register your UNO Q](#setup-register-your-uno-q-with-the-factory) and the device will pull the new target on its next poll.
 
 ## Links
 
-- Edge Impulse project: https://studio.edgeimpulse.com/studio/25483
-- Foundries factory: https://app.foundries.io/factories/jenny/
-- UNO Q getting started: https://docs.foundries.io/96/getting-started/arduino-uno-q/index.html
-- Edge Impulse on UNO Q: https://docs.edgeimpulse.com/hardware/boards/arduino-uno-q
+- Edge Impulse on UNO Q: <https://docs.edgeimpulse.com/hardware/boards/arduino-uno-q>
+- Foundries UNO Q getting started: <https://docs.foundries.io/96/getting-started/arduino-uno-q/index.html>
+- Foundries fioup docs: <https://github.com/foundriesio/fioup>
+- Edge Impulse Studio API: <https://studio.edgeimpulse.com/openapi.yml>
 
 ## License
 

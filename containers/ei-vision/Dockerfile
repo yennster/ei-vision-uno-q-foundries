@@ -11,12 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY object-detection.eim /app/object-detection.eim
-RUN chmod +x /app/object-detection.eim
+COPY model.eim /app/model.eim
+RUN chmod +x /app/model.eim
 
 EXPOSE 4912
 
 CMD ["edge-impulse-linux-runner", \
-     "--model-file", "/app/object-detection.eim", \
+     "--model-file", "/app/model.eim", \
      "--enable-camera", \
      "--silent"]

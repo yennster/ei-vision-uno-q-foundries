@@ -15,9 +15,16 @@ jobs:
   push-to-factory:
     runs-on: ubuntu-latest
     env:
-      FACTORY: jenny
-      APP_NAME: ei-vision
+      FACTORY: ${{ vars.FOUNDRIES_FACTORY }}
+      APP_NAME: ${{ vars.APP_NAME || 'ei-vision' }}
     steps:
+      - name: Validate config
+        run: |
+          if [ -z "${FACTORY}" ]; then
+            echo "::error::Repo variable FOUNDRIES_FACTORY is not set."; exit 1
+          fi
+          echo "factory=${FACTORY} app=${APP_NAME}"
+
       - name: Checkout this repo
         uses: actions/checkout@v4
         with:
@@ -34,7 +41,7 @@ jobs:
           FOUNDRIES_API_TOKEN: ${{ secrets.FOUNDRIES_API_TOKEN }}
         run: |
           if [ -z "${FOUNDRIES_API_TOKEN}" ]; then
-            echo "FOUNDRIES_API_TOKEN secret is not set"; exit 1
+            echo "::error::FOUNDRIES_API_TOKEN secret is not set"; exit 1
           fi
           git clone --depth=1 \
             "https://api-token:${FOUNDRIES_API_TOKEN}@source.foundries.io/factories/${FACTORY}/containers.git" \
@@ -46,10 +53,19 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Sync app into factory repo
+      - name: Sync app into factory repo (with templated compose)
         run: |
-          rm -rf "factory-containers/${APP_NAME}"
-          cp -r "containers/${APP_NAME}" "factory-containers/${APP_NAME}"
+          set -euo pipefail
+          DEST="factory-containers/${APP_NAME}"
+          rm -rf "${DEST}"
+          cp -r "containers/${APP_NAME}" "${DEST}"
+          # Replace placeholders with the per-fork values.
+          if [ -f "${DEST}/docker-compose.yml" ]; then
+            sed -i \
+              -e "s|__FACTORY__|${FACTORY}|g" \
+              -e "s|__APP_NAME__|${APP_NAME}|g" \
+              "${DEST}/docker-compose.yml"
+          fi
 
       - name: Commit and push if changed
         working-directory: factory-containers

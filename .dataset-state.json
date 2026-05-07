@@ -1,7 +1,4 @@
 {
-  "projectId": 25483,
   "lastTrainedSampleCount": 44,
-  "deploymentTarget": "arduino-uno-q",
-  "modelType": "float32",
-  "deploymentVersion": 45
+  "lastDeploymentVersion": 45
 }
