@@ -8,42 +8,27 @@ This repo ships a working coffee/lamp object detector as the bundled example —
 
 ## Architecture
 
-```
-                       ┌─────────────────────────────────────────────────────┐
-                       │ GitHub repo  <owner>/<repo>                         │
-                       │                                                     │
-   new training data   │  ┌──────────────────────────────────────────────┐   │
-   ┌──────────────┐ ◄──┼──┤ ① ei-data-watch-and-retrain.yml  (hourly)    │   │
-   │ Edge Impulse │    │  │   • compares EI sample count vs              │   │
-   │ project      │ ───┼─►│     .dataset-state.json                      │   │
-   │ vars.EI_PROJECT_ID │  │   • POST /jobs/retrain → poll                │   │
-   └──────────────┘    │  │   • POST /jobs/build-ondevice-model          │   │
-        ▲              │  │   • download .eim → commit → push vX.Y.Z tag │   │
-        │              │  └─────────────────────┬────────────────────────┘   │
-   EI_API_KEY secret   │                        │ tag push                   │
-                       │                        ▼                            │
-                       │  ┌──────────────────────────────────────────────┐   │
-                       │  │ ② foundries-deploy.yml  (on v* tag)          │   │
-                       │  │   • clone factory containers.git             │   │
-                       │  │   • template compose with FACTORY/APP_NAME   │   │
-                       │  │   • git push                                 │   │
-                       │  └─────────────────────┬────────────────────────┘   │
-                       └────────────────────────┼────────────────────────────┘
-                                                │ FOUNDRIES_API_TOKEN
-                                                ▼
-                                ┌────────────────────────────────────┐
-                                │ Foundries factory                  │
-                                │ vars.FOUNDRIES_FACTORY             │
-                                │ container-main CI builds arm64 OTA │
-                                └────────────────┬───────────────────┘
-                                                 │ aktualizr-lite poll
-                                                 ▼
-                                ┌────────────────────────────────────┐
-                                │ Arduino UNO Q                      │
-                                │ pulls + runs <APP_NAME>            │
-                                │ edge-impulse-linux-runner          │
-                                │ on /dev/video0  →  :4912           │
-                                └────────────────────────────────────┘
+```mermaid
+flowchart TB
+    EI["Edge Impulse project<br/><i>vars.EI_PROJECT_ID</i>"]
+
+    subgraph GH["GitHub repo &lt;owner&gt;/&lt;repo&gt;"]
+        direction TB
+        WF1["<b>① ei-data-watch-and-retrain.yml</b> (hourly)<br/>• compare EI sample count vs <code>.dataset-state.json</code><br/>• POST /jobs/retrain → poll<br/>• POST /jobs/build-ondevice-model<br/>• download .eim → commit → push <code>vX.Y.Z</code> tag"]
+        WF2["<b>② foundries-deploy.yml</b> (on <code>v*</code> tag)<br/>• clone factory <code>containers.git</code><br/>• template compose with <code>__FACTORY__</code> / <code>__APP_NAME__</code><br/>• git push"]
+        WF1 -- "tag push" --> WF2
+    end
+
+    Factory["Foundries factory<br/><i>vars.FOUNDRIES_FACTORY</i><br/>container-main CI builds arm64 OTA target"]
+    UnoQ["Arduino UNO Q<br/>pulls + runs &lt;APP_NAME&gt;<br/><code>edge-impulse-linux-runner</code> on /dev/video0 → :4912"]
+
+    EI -- "sample counts<br/>(EI_API_KEY)" --> WF1
+    WF1 -- "retrain + build<br/>(EI_API_KEY)" --> EI
+    WF2 -- "FOUNDRIES_API_TOKEN" --> Factory
+    Factory -- "aktualizr-lite poll" --> UnoQ
+
+    classDef secret stroke-dasharray: 4 3;
+    class EI,Factory,UnoQ secret;
 ```
 
 Two GitHub Actions workflows form the closed loop. ① watches EI for new data and produces a tagged release; ② reacts to that tag and pushes to the factory. From there Foundries' own CI takes over and the device polls for the new target.
