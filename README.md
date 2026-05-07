@@ -7,20 +7,44 @@ End-to-end **object detection on an Arduino UNO Q**, trained with **Edge Impulse
 ## Architecture
 
 ```
-┌───────────────┐    .eim    ┌────────────────────┐   git push  ┌──────────────────┐
-│ Edge Impulse  │ ─────────► │ containers/        │ ──────────► │ Foundries        │
-│ project 25483 │            │   ei-vision/       │             │ factory: jenny   │
-│ (FOMO 320x320)│            │   ├─ Dockerfile    │             │ container-main CI│
-└───────────────┘            │   └─ compose.yml   │             └────────┬─────────┘
-                             └────────────────────┘                      │ OTA target
-                                                                          ▼
-                                                              ┌──────────────────────┐
-                                                              │ Arduino UNO Q        │
-                                                              │ aktualizr-lite pulls │
-                                                              │ + runs ei-vision     │
-                                                              │ on /dev/video0       │
-                                                              └──────────────────────┘
+                       ┌─────────────────────────────────────────────────────┐
+                       │ GitHub repo  yennster/ei-vision-uno-q-foundries     │
+                       │                                                     │
+   new training data   │  ┌──────────────────────────────────────────────┐   │
+   ┌──────────────┐ ◄──┼──┤ ① ei-data-watch-and-retrain.yml  (hourly)    │   │
+   │ Edge Impulse │    │  │   • compares EI sample count vs              │   │
+   │ project 25483│ ───┼─►│     .dataset-state.json                      │   │
+   │ (FOMO 320x320)│   │  │   • POST /jobs/retrain → poll                │   │
+   └──────────────┘    │  │   • POST /jobs/build-ondevice-model          │   │
+        ▲              │  │   • download .eim → commit → push vX.Y.Z tag │   │
+        │              │  └─────────────────────┬────────────────────────┘   │
+   EI_API_KEY secret   │                        │ tag push                   │
+                       │                        ▼                            │
+                       │  ┌──────────────────────────────────────────────┐   │
+                       │  │ ② foundries-deploy.yml  (on v* tag)          │   │
+                       │  │   • clone factory containers.git             │   │
+                       │  │   • sync containers/ei-vision/ → ei-vision/  │   │
+                       │  │   • git push                                 │   │
+                       │  └─────────────────────┬────────────────────────┘   │
+                       └────────────────────────┼────────────────────────────┘
+                                                │ FOUNDRIES_API_TOKEN
+                                                ▼
+                                ┌────────────────────────────┐
+                                │ Foundries factory: jenny   │
+                                │ container-main CI builds   │
+                                │ arm64 OTA target           │
+                                └────────────┬───────────────┘
+                                             │ aktualizr-lite poll
+                                             ▼
+                                ┌────────────────────────────┐
+                                │ Arduino UNO Q              │
+                                │ pulls + runs ei-vision     │
+                                │ edge-impulse-linux-runner  │
+                                │ on /dev/video0  →  :4912   │
+                                └────────────────────────────┘
 ```
+
+Two GitHub Actions workflows form the closed loop. ① watches EI for new data and produces a tagged release; ② reacts to that tag and pushes to the factory. From there Foundries' own CI takes over and the device polls for the new target.
 
 ## Repo layout
 
