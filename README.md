@@ -38,6 +38,29 @@ End-to-end **object detection on an Arduino UNO Q**, trained with **Edge Impulse
         └── README.md
 ```
 
+## Setup: GitHub secrets
+
+The two automation workflows below need credentials. Set them once on your fork:
+
+| Secret                 | Used by                                  | Where to get it                                                                 |
+|------------------------|------------------------------------------|---------------------------------------------------------------------------------|
+| `EI_API_KEY`           | `ei-data-watch-and-retrain.yml`          | EI Studio → your project → **Dashboard → Keys** → copy the `ei_…` API key       |
+| `FOUNDRIES_API_TOKEN`  | `foundries-deploy.yml`                   | https://app.foundries.io/settings/tokens/ → **New API Token** with `source:readwrite` scope |
+
+Set them via the GitHub UI **or** the `gh` CLI:
+
+**UI:** Repo → *Settings* → *Secrets and variables* → *Actions* → *New repository secret* → paste the name above and the value.
+
+**CLI:**
+
+```bash
+gh secret set EI_API_KEY          --repo <owner>/<repo>   # paste EI key when prompted
+gh secret set FOUNDRIES_API_TOKEN --repo <owner>/<repo>   # paste Foundries token
+gh secret list                    --repo <owner>/<repo>   # verify both are present
+```
+
+These secrets are encrypted and only exposed to workflow runs at execution time. Rotate them in Edge Impulse / Foundries first, then re-run `gh secret set` to update GitHub.
+
 ## Pipeline
 
 ### 1. Build the Edge Impulse model
@@ -66,21 +89,13 @@ curl -L -H "x-api-key: $EI_API_KEY" \
 
 The new tag fires `foundries-deploy.yml`, completing the pipeline EI → GitHub → Foundries → device.
 
-Required repo secret:
-
-| Secret         | Purpose                                          |
-|----------------|--------------------------------------------------|
-| `EI_API_KEY`   | Edge Impulse project API key (read+deploy scope) |
+Uses the `EI_API_KEY` secret (see [Setup: GitHub secrets](#setup-github-secrets)).
 
 ### 2. Ship to the Foundries factory
 
 **Automated (recommended):** [`.github/workflows/foundries-deploy.yml`](.github/workflows/foundries-deploy.yml) syncs `containers/ei-vision/` into the factory's `containers.git` whenever a `v*` tag is pushed. It can also be run manually via *Actions → Push to Foundries containers.git → Run workflow*.
 
-Required repo secret:
-
-| Secret                 | Value                                              |
-|------------------------|----------------------------------------------------|
-| `FOUNDRIES_API_TOKEN`  | A Foundries API token with write access to `containers.git` |
+Uses the `FOUNDRIES_API_TOKEN` secret (see [Setup: GitHub secrets](#setup-github-secrets)).
 
 **Manual fallback:**
 
