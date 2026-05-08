@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Show. Train. Ship. Repeat. — booth dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <header class="hero">
+    <h1>SHOW<span class="dot">.</span> TRAIN<span class="dot">.</span> SHIP<span class="dot">.</span> REPEAT<span class="dot">.</span></h1>
+    <div class="subtitle">
+      Powered by <span class="badge">Arduino UNO Q</span>
+      <span class="badge ei">Edge Impulse</span>
+      <span class="badge fnd">Foundries.io</span>
+    </div>
+    <div class="meta">
+      <span id="lastUpdated">connecting…</span>
+    </div>
+  </header>
+
+  <main class="grid">
+
+    <section class="pane runner" id="runnerPane">
+      <h2>① SHOW · live inference</h2>
+      <div class="runner-frame">
+        <iframe id="runnerIframe" title="edge-impulse-linux-runner" allow="camera"></iframe>
+        <div id="runnerFallback" class="runner-fallback">
+          <p>Set <code>RUNNER_URL</code> in <code>.env</code> to point at your UNO Q's runner UI.</p>
+          <p class="muted">Example: <code>http://uno-q.local:4912</code></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane samples">
+      <h2>① SHOW · samples in EI project</h2>
+      <div class="big-number" id="totalCount">—</div>
+      <div class="line">
+        <span id="projectName" class="muted">project name</span>
+      </div>
+      <div class="split">
+        <div><label>training</label><span id="trainCount">—</span></div>
+        <div><label>testing</label><span id="testCount">—</span></div>
+      </div>
+    </section>
+
+    <section class="pane train">
+      <h2>② TRAIN · current EI activity</h2>
+      <div class="status" id="eiJobStatus">
+        <span class="dot-led idle"></span>
+        <span id="eiJobLabel">idle</span>
+      </div>
+      <ul class="job-list" id="eiJobList"></ul>
+    </section>
+
+    <section class="pane gh">
+      <h2>② TRAIN · GitHub Actions</h2>
+      <ul class="run-list" id="ghRunList"></ul>
+    </section>
+
+    <section class="pane ship">
+      <h2>③ SHIP · Foundries factory</h2>
+      <div class="line"><label>factory</label><span id="factoryName">—</span></div>
+      <div class="line"><label>targets built</label><span id="targetCount" class="emph">—</span></div>
+      <div class="line"><label>devices</label><span id="deviceCount" class="emph">—</span></div>
+      <div class="versions">
+        <label>recent OTA targets</label>
+        <ul id="targetList"></ul>
+      </div>
+    </section>
+
+    <section class="pane repeat">
+      <h2>④ REPEAT · device fleet</h2>
+      <ul class="device-list" id="deviceList">
+        <li class="empty muted">no devices registered yet</li>
+      </ul>
+      <div class="line">
+        <label>latest tag in repo</label>
+        <span id="latestTag" class="emph">—</span>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    <span id="repoName"></span>
+    <span class="spacer"></span>
+    <span id="pollNote" class="muted">refreshes every 20s</span>
+  </footer>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

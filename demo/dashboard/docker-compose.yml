@@ -1,0 +1,9 @@
+services:
+  dashboard:
+    build: .
+    image: ei-booth-dashboard:latest
+    container_name: ei-booth-dashboard
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8088:8088"
