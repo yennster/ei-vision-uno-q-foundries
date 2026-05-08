@@ -3,11 +3,11 @@
 motion-watcher.py — capture & upload frames whenever something enters
 the camera's field of view.
 
-Uses OpenCV's MOG2 background subtractor — no second model, no .eim,
-no Edge Impulse inference. After a brief warmup it learns the static
-scene; when foreground pixels exceed THRESHOLD (and the largest
-foreground blob is bigger than MIN_AREA), the frame is handed to
-capture-and-upload.sh so it lands in your EI training/testing dataset.
+Uses OpenCV's MOG2 background subtractor: after a brief warmup it
+learns the static scene; when foreground pixels exceed THRESHOLD (and
+the largest foreground blob is bigger than MIN_AREA), the frame is
+handed to capture-and-upload.sh so it lands in your EI training or
+testing dataset.
 
 Architecture:
 

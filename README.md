@@ -307,7 +307,7 @@ Recognized env: `LABEL`, `CATEGORY` (`training`/`testing`), `COUNT`, `INTERVAL`,
 
 ## Auto-capture on motion
 
-[`scripts/motion-watcher.py`](scripts/motion-watcher.py) turns the UNO Q into an active-learning data collector with **no second model** — it runs OpenCV's MOG2 background subtractor, learns the static scene during a brief warmup, and triggers a capture whenever something significant enters the frame. The captured frame is handed to [`capture-and-upload.sh`](scripts/capture-and-upload.sh), which uploads it to your EI project's training (or testing) set. The next workflow ① tick retrains on the new samples.
+[`scripts/motion-watcher.py`](scripts/motion-watcher.py) turns the UNO Q into a hands-off data collector. It runs OpenCV's MOG2 background subtractor, learns the static scene during a brief warmup, and triggers a capture whenever something significant enters the frame. The captured frame is handed to [`capture-and-upload.sh`](scripts/capture-and-upload.sh), which uploads it to your EI project's training (or testing) set. The next workflow ① tick retrains on the new samples.
 
 ```
 /dev/video0 ─► MOG2 background subtraction ─► motion%, blob area
@@ -329,8 +329,6 @@ Recognized env: `LABEL`, `CATEGORY` (`training`/`testing`), `COUNT`, `INTERVAL`,
 ```bash
 sudo apt install -y python3-opencv ffmpeg
 ```
-
-That's it — no `pip install`, no second `.eim`.
 
 **Run the watcher:**
 
