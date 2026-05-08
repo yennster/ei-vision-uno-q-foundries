@@ -6,6 +6,8 @@ A reusable template that takes **any Edge Impulse vision project**, builds it fo
 
 This repo ships a working coffee/lamp object detector as the bundled example — see [Included example](#included-example).
 
+Created with Claude Code.
+
 ## Architecture
 
 ```mermaid
