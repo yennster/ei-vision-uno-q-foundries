@@ -74,7 +74,21 @@ The `app/app.yaml` shipped here wires this example into the App Lab `arduino:vid
 │   ├── register-device.sh                # non-interactive `fioup register --api-token` wrapper
 │   ├── capture-and-upload.sh             # grab frames on the UNO Q & POST to EI ingestion API
 │   └── motion-watcher.py                 # OpenCV background subtraction; on motion, trigger capture
-├── docs/images/                          # README screenshots
+├── demo/
+│   ├── README.md                         # booth demo overview
+│   └── dashboard/                        # FastAPI booth dashboard ("Show. Train. Ship. Repeat.")
+│       ├── server.py                     # WebSocket live view + EI/Foundries pollers
+│       ├── static/                       # index.html, dashboard.css, dashboard.js
+│       ├── Dockerfile
+│       ├── docker-compose.yml
+│       ├── requirements.txt
+│       └── .env.example
+├── docs/
+│   ├── booth/
+│   │   ├── setup.md                      # booth hardware setup guide
+│   │   ├── handout.md                    # printable booth handout
+│   │   └── handout.html
+│   └── images/                           # README screenshots
 ├── .dataset-state.json                   # mutable state (sample count, deployment version)
 ├── .github/workflows/
 │   ├── ei-data-watch-and-retrain.yml     # ①
