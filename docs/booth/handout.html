@@ -142,6 +142,39 @@
       font-size: 0.92em;
     }
 
+    /* Hardware diagram */
+    .hardware {
+      margin-top: 0.18in;
+    }
+    .hardware h2 { margin-top: 0; }
+    .hardware svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 1.7in;
+    }
+    .hw-label {
+      font: 600 9pt ui-sans-serif, system-ui, sans-serif;
+      fill: var(--ink);
+    }
+    .hw-sub {
+      font: 7.5pt ui-monospace, "JetBrains Mono", monospace;
+      fill: var(--muted);
+    }
+    .hw-tag {
+      font: 600 7pt ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      fill: var(--muted);
+    }
+    .hw-edge       { stroke: var(--ink); stroke-width: 1.2; fill: none; }
+    .hw-edge-soft  { stroke: var(--muted); stroke-width: 1; fill: none; stroke-dasharray: 3 3; }
+    .hw-box        { fill: white; stroke: var(--ink); stroke-width: 1.2; }
+    .hw-box-ard    { stroke: var(--ard); }
+    .hw-box-ei     { stroke: var(--ei); }
+    .hw-box-fnd    { stroke: var(--pop); }
+    .hw-edge-fnd   { stroke: var(--pop); stroke-width: 1.2; fill: none; }
+
     /* Take-it-home strip */
     .takehome {
       margin-top: 0.18in;
@@ -243,6 +276,89 @@
         </table>
       </div>
     </div>
+
+    <section class="hardware">
+      <h2>What's on the booth</h2>
+      <svg viewBox="0 0 760 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Booth hardware layout">
+        <defs>
+          <marker id="hw-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#0d0d0d"/>
+          </marker>
+          <marker id="hw-arrow-fnd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#d44128"/>
+          </marker>
+        </defs>
+
+        <!-- ── booth-table band labels ──────────────────────────────── -->
+        <text x="6" y="14"  class="hw-tag">on the booth table</text>
+        <text x="6" y="160" class="hw-tag">on the back wall</text>
+
+        <!-- ── pedestal (bottom of upper band) ──────────────────────── -->
+        <rect x="22" y="86" width="92" height="34" rx="6" class="hw-box"/>
+        <text x="68" y="100" class="hw-label" text-anchor="middle">pedestal</text>
+        <text x="68" y="113" class="hw-sub"   text-anchor="middle">object</text>
+
+        <!-- camera looks down at pedestal -->
+        <rect x="22" y="34" width="92" height="34" rx="6" class="hw-box"/>
+        <text x="68" y="48" class="hw-label" text-anchor="middle">USB webcam</text>
+        <text x="68" y="61" class="hw-sub"   text-anchor="middle">UVC class</text>
+        <path d="M 68 68 L 68 86" class="hw-edge-soft"/>
+        <text x="74" y="80" class="hw-sub">aimed at</text>
+
+        <!-- ── UNO Q (centre of upper band) ─────────────────────────── -->
+        <rect x="180" y="50" width="120" height="56" rx="6" class="hw-box hw-box-ard"/>
+        <text x="240" y="68" class="hw-label" text-anchor="middle" style="fill:var(--ard)">Arduino UNO Q</text>
+        <text x="240" y="82" class="hw-sub"   text-anchor="middle">edge-impulse-linux-runner</text>
+        <text x="240" y="95" class="hw-sub"   text-anchor="middle">motion-watcher.py</text>
+
+        <!-- camera → UNO Q -->
+        <path d="M 114 50 L 180 70" class="hw-edge" marker-end="url(#hw-arrow)"/>
+        <text x="120" y="46" class="hw-sub">USB</text>
+
+        <!-- ── cloud trio (upper-right) ─────────────────────────────── -->
+        <rect x="380" y="34" width="110" height="34" rx="6" class="hw-box hw-box-ei"/>
+        <text x="435" y="55" class="hw-label" text-anchor="middle" style="fill:var(--ei)">Edge Impulse</text>
+
+        <rect x="510" y="34" width="110" height="34" rx="6" class="hw-box"/>
+        <text x="565" y="55" class="hw-label" text-anchor="middle">GitHub Actions</text>
+
+        <rect x="640" y="34" width="110" height="34" rx="6" class="hw-box hw-box-fnd"/>
+        <text x="695" y="55" class="hw-label" text-anchor="middle" style="fill:var(--pop)">Foundries</text>
+
+        <!-- UNO Q → EI (upload) -->
+        <path d="M 300 60 L 380 50" class="hw-edge" marker-end="url(#hw-arrow)"/>
+        <text x="320" y="44" class="hw-sub">① upload</text>
+
+        <!-- EI → GH -->
+        <path d="M 490 50 L 510 50" class="hw-edge" marker-end="url(#hw-arrow)"/>
+
+        <!-- GH → Foundries -->
+        <path d="M 620 50 L 640 50" class="hw-edge" marker-end="url(#hw-arrow)"/>
+
+        <!-- Foundries → UNO Q (OTA loop, curved) -->
+        <path d="M 695 68 C 695 130, 300 150, 240 106" class="hw-edge-fnd" marker-end="url(#hw-arrow-fnd)"/>
+        <text x="495" y="142" class="hw-sub" text-anchor="middle" style="fill:var(--pop)">④ OTA target  (aktualizr-lite)</text>
+
+        <!-- ── back-wall band ───────────────────────────────────────── -->
+        <line x1="0" y1="155" x2="760" y2="155" stroke="#d0d0d0" stroke-dasharray="2 3"/>
+
+        <!-- Booth laptop -->
+        <rect x="320" y="166" width="130" height="28" rx="6" class="hw-box"/>
+        <text x="385" y="185" class="hw-label" text-anchor="middle">booth laptop</text>
+
+        <!-- Monitor / TV -->
+        <rect x="540" y="166" width="160" height="28" rx="6" class="hw-box"/>
+        <text x="620" y="185" class="hw-label" text-anchor="middle">monitor / dashboard</text>
+
+        <!-- UNO Q → laptop (live inference / API stats) -->
+        <path d="M 240 106 C 240 150, 350 150, 360 166" class="hw-edge"/>
+        <text x="290" y="160" class="hw-sub">live inference + stats</text>
+
+        <!-- Laptop → monitor -->
+        <path d="M 450 180 L 540 180" class="hw-edge" marker-end="url(#hw-arrow)"/>
+        <text x="465" y="174" class="hw-sub">HDMI</text>
+      </svg>
+    </section>
 
     <div class="takehome">
       <div>
