@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Show. Train. Ship. Repeat.</title>
+  <style>
+    @page { size: letter; margin: 0.4in; }
+    :root {
+      --ink:   #0d0d0d;
+      --muted: #555;
+      --line:  #d0d0d0;
+      --pop:   #d44128;   /* Foundries-ish orange/red */
+      --ei:    #36b37e;   /* Edge Impulse-ish green */
+      --bg:    #fafaf6;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Inter", "Helvetica Neue", Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.4;
+    }
+    .page {
+      width: 7.7in;
+      margin: 0 auto;
+      padding: 0;
+    }
+    h1 {
+      font-size: 30pt;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      margin: 0 0 0.05in 0;
+      font-weight: 800;
+    }
+    h1 .dot { color: var(--pop); }
+    .subtitle {
+      font-size: 11pt;
+      color: var(--muted);
+      margin: 0 0 0.18in 0;
+      letter-spacing: 0.02em;
+    }
+    .subtitle .ei { color: var(--ei); font-weight: 600; }
+    .subtitle .fnd { color: var(--pop); font-weight: 600; }
+
+    .lede {
+      border-left: 3px solid var(--ink);
+      padding: 0.05in 0.18in;
+      margin: 0.1in 0 0.2in 0;
+      font-size: 10.5pt;
+    }
+
+    h2 {
+      font-size: 12pt;
+      margin: 0.18in 0 0.06in 0;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--ink);
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 0.04in;
+    }
+
+    /* Loop */
+    .loop {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.12in;
+      margin-bottom: 0.18in;
+    }
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0.10in;
+      background: white;
+    }
+    .step .num {
+      font-size: 22pt;
+      font-weight: 800;
+      color: var(--pop);
+      line-height: 1;
+    }
+    .step .verb {
+      font-size: 10pt;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin: 0.04in 0 0.05in 0;
+    }
+    .step p {
+      margin: 0;
+      font-size: 9pt;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    /* Two-column block */
+    .cols {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 0.25in;
+    }
+    .cols ul {
+      margin: 0.04in 0;
+      padding-left: 0.18in;
+    }
+    .cols li { margin-bottom: 0.05in; font-size: 10pt; }
+    .cols b { color: var(--ink); }
+
+    table.stack {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+    }
+    table.stack th, table.stack td {
+      text-align: left;
+      padding: 0.05in 0.06in;
+      vertical-align: top;
+    }
+    table.stack th {
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      font-weight: 700;
+      border-bottom: 1px solid var(--line);
+    }
+    table.stack td:first-child {
+      font-weight: 600;
+      width: 22%;
+      white-space: nowrap;
+    }
+    table.stack tr + tr td { border-top: 1px solid var(--line); }
+    code {
+      font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+      background: #efece4;
+      padding: 0 0.04in;
+      border-radius: 3px;
+      font-size: 0.92em;
+    }
+
+    /* Take-it-home strip */
+    .takehome {
+      margin-top: 0.18in;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.2in;
+      align-items: center;
+      border: 1.5px solid var(--ink);
+      border-radius: 8px;
+      padding: 0.14in 0.18in;
+      background: white;
+    }
+    .takehome .repo {
+      font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+      font-size: 11.5pt;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 0.04in;
+    }
+    .takehome p { margin: 0.04in 0; font-size: 9.5pt; color: var(--muted); }
+    .takehome .qrslot {
+      width: 1in; height: 1in;
+      border: 1.5px dashed var(--line);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted);
+      font-size: 8pt;
+      text-align: center;
+    }
+
+    .footer {
+      margin-top: 0.16in;
+      padding-top: 0.08in;
+      border-top: 1px solid var(--line);
+      font-size: 8.5pt;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    @media print {
+      body { background: white; }
+      .takehome { background: white; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <h1>SHOW<span class="dot">.</span> TRAIN<span class="dot">.</span> SHIP<span class="dot">.</span> REPEAT<span class="dot">.</span></h1>
+    <div class="subtitle">Powered by <span class="ei">Edge Impulse</span> + <span class="fnd">Foundries.io</span></div>
+
+    <div class="lede">
+      You picked something up at another booth — a squishy, a sticker, a branded mug, whatever. You set it in front of this $40 Arduino UNO Q. The model didn't know what it was at 9 a.m. By the time you finish your coffee, the model knows. So do all the other boards in this booth.
+      <br><br>
+      That's a full active-learning loop running, in public, on a tech-conference floor.
+    </div>
+
+    <h2>The loop, in four moves</h2>
+    <div class="loop">
+      <div class="step">
+        <div class="num">①</div>
+        <div class="verb">Show</div>
+        <p>USB camera + OpenCV motion detector spots a new object. Frame uploads to the Edge Impulse training set.</p>
+      </div>
+      <div class="step">
+        <div class="num">②</div>
+        <div class="verb">Train</div>
+        <p>GitHub Actions polls EI hourly. New samples → retrain → build a fresh <code>.eim</code> → tag a release. <b>~10 min.</b></p>
+      </div>
+      <div class="step">
+        <div class="num">③</div>
+        <div class="verb">Ship</div>
+        <p>Second workflow reacts to the tag, syncs the container into the Foundries factory's <code>containers.git</code>, factory CI builds an arm64 OTA target.</p>
+      </div>
+      <div class="step">
+        <div class="num">④</div>
+        <div class="verb">Repeat</div>
+        <p>Every UNO Q in the fleet pulls the target via aktualizr-lite. Devices never get touched. No re-flashing. No SSH.</p>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div>
+        <h2>Why it lands</h2>
+        <ul>
+          <li><b>A $40 board, not a $1,000 dev kit.</b> The UNO Q runs Debian on aarch64 — full Linux, full Docker, room for surprises.</li>
+          <li><b>One workflow, any fleet size.</b> Updating one board and updating ten thousand is the same operation.</li>
+          <li><b>Active learning isn't theory.</b> The booth's model gets <i>measurably</i> better between coffee and lunch. The version timeline poster is updated live.</li>
+        </ul>
+      </div>
+      <div>
+        <h2>The stack</h2>
+        <table class="stack">
+          <tr><th>Layer</th><th>What's running</th></tr>
+          <tr><td>Device</td><td>Arduino UNO Q · <code>edge-impulse-linux-runner</code> · <code>motion-watcher.py</code></td></tr>
+          <tr><td>ML</td><td>Edge Impulse — training, hosted build, ingestion API</td></tr>
+          <tr><td>Fleet</td><td>Foundries.io — <code>containers.git</code>, container CI, OTA, aktualizr-lite</td></tr>
+          <tr><td>Glue</td><td>GitHub Actions — hourly EI watcher + tag-driven Foundries deploy</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="takehome">
+      <div>
+        <h2 style="border:none; padding:0; margin:0 0 0.04in 0;">Take it home</h2>
+        <div class="repo">github.com/yennster/ei-vision-uno-q-foundries</div>
+        <p>Fork it, set 2 GitHub variables (<code>EI_PROJECT_ID</code>, <code>FOUNDRIES_FACTORY</code>) and 2 secrets (API keys), register a UNO Q with <code>fioup</code>. The loop is yours. <b>~150 lines</b> of Bash + Python.</p>
+      </div>
+      <div class="qrslot">QR code<br>(generate from repo URL)</div>
+    </div>
+
+    <div class="footer">
+      <span>Booth team: <i>your names here</i></span>
+      <span>@yennster · MIT-licensed · built for $&lt;you fill in&gt;</span>
+    </div>
+
+  </div>
+</body>
+</html>
