@@ -6,6 +6,7 @@
   --bg:    #0a0a0a;
   --pop:   #ff5a3b;     /* Foundries-ish */
   --ei:    #36b37e;     /* Edge Impulse-ish */
+  --ard:   #00979d;     /* Arduino teal (brighter on dark bg) */
   --pane:  #131313;
   --led-idle:   #555;
   --led-go:     #36b37e;
@@ -52,6 +53,7 @@ code, .mono { font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, mon
   font-weight: 600;
   color: #ededed;
 }
+.badge.ard { color: var(--ard); border-color: rgba(0,151,157,0.5); }
 .badge.ei  { color: var(--ei);  border-color: rgba(54,179,126,0.4); }
 .badge.fnd { color: var(--pop); border-color: rgba(255,90,59,0.4); }
 
